@@ -34,7 +34,7 @@ class Origin;
  */
 class AppExport OriginGroupExtension : public App::GeoFeatureGroupExtension
 {
-    EXTENSION_PROPERTY_HEADER(App::OriginGroupExtension);
+    EXTENSION_PROPERTY_HEADER_WITH_OVERRIDE(App::OriginGroupExtension);
     
 public:
     OriginGroupExtension ();
@@ -62,6 +62,11 @@ public:
     
     /// Origin linked to the group
     PropertyLink Origin;
+    
+    //changes all links of obj to a origin to point to this groupes origin
+    void relinkToOrigin(App::DocumentObject* obj);
+    
+    virtual void addObject(DocumentObject* obj) override;
 
 protected:
     /// Checks integrity of the Origin

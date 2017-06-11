@@ -83,7 +83,7 @@ App::DocumentObjectExecReturn *Feature::recompute(void)
         return App::GeoFeature::recompute();
     }
     catch (Standard_Failure) {
-        Handle_Standard_Failure e = Standard_Failure::Caught();
+        Handle(Standard_Failure) e = Standard_Failure::Caught();
         App::DocumentObjectExecReturn* ret = new App::DocumentObjectExecReturn(e->GetMessageString());
         if (ret->Why.empty()) ret->Why = "Unknown OCC exception";
         return ret;
@@ -93,7 +93,7 @@ App::DocumentObjectExecReturn *Feature::recompute(void)
 App::DocumentObjectExecReturn *Feature::execute(void)
 {
     this->Shape.touch();
-    return App::DocumentObject::StdReturn;
+    return GeoFeature::execute();
 }
 
 PyObject *Feature::getPyObject(void)
@@ -236,6 +236,11 @@ ShapeHistory Feature::joinHistory(const ShapeHistory& oldH, const ShapeHistory& 
     /// returns the type name of the ViewProvider
 const char* Feature::getViewProviderName(void) const {
     return "PartGui::ViewProviderPart";
+}
+
+const App::PropertyComplexGeoData* Feature::getPropertyOfGeometry() const
+{
+    return &Shape;
 }
 
 // ---------------------------------------------------------

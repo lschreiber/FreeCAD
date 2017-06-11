@@ -121,12 +121,12 @@ int ToolPy::PyInit(PyObject* args, PyObject* kwd)
     else 
         getToolPtr()->Material = Tool::MATUNDEFINED;
 
-    getToolPtr()->Diameter = PyFloat_AsDouble(dia);
-    getToolPtr()->LengthOffset = PyFloat_AsDouble(len);
-    getToolPtr()->FlatRadius = PyFloat_AsDouble(fla);
-    getToolPtr()->CornerRadius = PyFloat_AsDouble(cor);
-    getToolPtr()->CuttingEdgeAngle = PyFloat_AsDouble(ang);
-    getToolPtr()->CuttingEdgeHeight = PyFloat_AsDouble(hei);
+    getToolPtr()->Diameter          = dia ? PyFloat_AsDouble(dia) : 0.0;
+    getToolPtr()->LengthOffset      = len ? PyFloat_AsDouble(len) : 0.0;
+    getToolPtr()->FlatRadius        = fla ? PyFloat_AsDouble(fla) : 0.0;
+    getToolPtr()->CornerRadius      = cor ? PyFloat_AsDouble(cor) : 0.0;
+    getToolPtr()->CuttingEdgeAngle  = ang ? PyFloat_AsDouble(ang) : 0.0;
+    getToolPtr()->CuttingEdgeHeight = hei ? PyFloat_AsDouble(hei) : 0.0;
 
     return 0;
 }
@@ -363,11 +363,19 @@ int TooltablePy::PyInit(PyObject* args, PyObject* /*kwd*/)
         PyObject *key, *value;
         Py_ssize_t pos = 0;
         while (PyDict_Next(pcObj, &pos, &key, &value)) {
+#if PY_MAJOR_VERSION >= 3
+            if ( !PyObject_TypeCheck(key,&(PyLong_Type)) || !PyObject_TypeCheck(value,&(Path::ToolPy::Type)) ) {
+#else
             if ( !PyObject_TypeCheck(key,&(PyInt_Type)) || !PyObject_TypeCheck(value,&(Path::ToolPy::Type)) ) {
+#endif
                 PyErr_SetString(PyExc_TypeError, "The dictionary can only contain int:tool pairs");
                 return -1;
             }
+#if PY_MAJOR_VERSION >= 3
+            int ckey = (int)PyLong_AsLong(key);
+#else
             int ckey = (int)PyInt_AsLong(key);
+#endif
             Path::Tool &tool = *static_cast<Path::ToolPy*>(value)->getToolPtr();
             getTooltablePtr()->setTool(tool,ckey);
         }
@@ -397,7 +405,11 @@ Py::Dict TooltablePy::getTools(void) const
     PyObject *dict = PyDict_New();
     for(std::map<int,Path::Tool*>::iterator i = getTooltablePtr()->Tools.begin(); i != getTooltablePtr()->Tools.end(); ++i) {
         PyObject *tool = new Path::ToolPy(i->second);
+#if PY_MAJOR_VERSION >= 3
+        PyDict_SetItem(dict,PyLong_FromLong(i->first),tool);
+#else
         PyDict_SetItem(dict,PyInt_FromLong(i->first),tool);
+#endif
     }
     return Py::Dict(dict);
 }
@@ -409,8 +421,13 @@ void TooltablePy::setTools(Py::Dict arg)
     PyObject *key, *value;
     Py_ssize_t pos = 0;
     while (PyDict_Next(dict_copy, &pos, &key, &value)) {
+#if PY_MAJOR_VERSION >= 3
+        if ( PyObject_TypeCheck(key,&(PyLong_Type)) && (PyObject_TypeCheck(value,&(Path::ToolPy::Type))) ) {
+            int ckey = (int)PyLong_AsLong(key);
+#else
         if ( PyObject_TypeCheck(key,&(PyInt_Type)) && (PyObject_TypeCheck(value,&(Path::ToolPy::Type))) ) {
             int ckey = (int)PyInt_AsLong(key);
+#endif
             Path::Tool &tool = *static_cast<Path::ToolPy*>(value)->getToolPtr();
             getTooltablePtr()->setTool(tool,ckey);
         } else {

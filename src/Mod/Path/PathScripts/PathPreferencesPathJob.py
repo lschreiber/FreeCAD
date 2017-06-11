@@ -24,12 +24,13 @@
 
 import FreeCAD
 import FreeCADGui
+from FreeCAD import Units
 from PySide import QtCore, QtGui
 from PathScripts.PathPreferences import PathPreferences
 from PathScripts.PathPostProcessor import PostProcessor
 
 
-class Page:
+class JobPreferencesPage:
     def __init__(self, parent=None):
         self.form = FreeCADGui.PySideUic.loadUi(":preferences/PathJob.ui")
 
@@ -45,7 +46,8 @@ class Page:
             item = self.form.postProcessorList.item(i)
             if item.checkState() == QtCore.Qt.CheckState.Unchecked:
                 blacklist.append(item.text())
-        PathPreferences.savePostProcessorDefaults(processor, args, blacklist)
+        geometryTolerance = Units.Quantity(self.form.geometryTolerance.text())
+        PathPreferences.savePostProcessorDefaults(processor, args, blacklist, geometryTolerance)
 
         path = str(self.form.leOutputFile.text())
         policy = str(self.form.cboOutputPolicy.currentText())
@@ -92,6 +94,10 @@ class Page:
         self.verifyAndUpdateDefaultPostProcessorWith(PathPreferences.defaultPostProcessor())
 
         self.form.defaultPostProcessorArgs.setText(PathPreferences.defaultPostProcessorArgs())
+
+        geomTol = Units.Quantity(PathPreferences.defaultGeometryTolerance(), Units.Length)
+        self.form.geometryTolerance.setText(geomTol.UserString)
+
         self.form.leOutputFile.setText(PathPreferences.defaultOutputFile())
         self.selectComboEntry(self.form.cboOutputPolicy, PathPreferences.defaultOutputPolicy())
 

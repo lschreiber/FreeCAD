@@ -29,8 +29,12 @@ __url__ = ["http://www.freecadweb.org"]
 
 ## \defgroup DRAFTVECUTILS DraftVecUtils
 #  \ingroup DRAFT
+#  \brief Vector math utilities used in Draft workbench
 #
 # Vector math utilities
+
+## \addtogroup DRAFTVECUTILS
+#  @{
 
 import math,FreeCAD
 from FreeCAD import Vector, Matrix
@@ -247,3 +251,5 @@ def removeDoubles(vlist):
             nlist.append(vlist[i])
     nlist.append(vlist[-1])
     return nlist
+
+##  @}

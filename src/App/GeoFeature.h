@@ -54,6 +54,18 @@ public:
      * @param transform (input).
      */
     virtual void transformPlacement(const Base::Placement &transform);
+    /**
+     * This method returns the main property of a geometric object that holds
+     * the actual geometry. For a part object this is the Shape property, for
+     * a mesh object the Mesh property and so on.
+     * The default implementation returns null.
+     */
+    virtual const PropertyComplexGeoData* getPropertyOfGeometry() const;
+    /**
+     * @brief getPyObject returns the Python binding object
+     * @return the Python binding object
+     */
+    virtual PyObject* getPyObject(void);
 };
 
 } //namespace App

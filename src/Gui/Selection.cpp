@@ -382,7 +382,7 @@ std::vector<SelectionObject> SelectionSingleton::getSelectionEx(const char* pDoc
         }
     }
 
-    // The map looses the order thus we have to go again through the list and pick up the SelectionObject from the map
+    // The map loses the order thus we have to go again through the list and pick up the SelectionObject from the map
     for (std::list<_SelObj>::const_iterator It = _SelList.begin();It != _SelList.end();++It) {
         std::map<App::DocumentObject*,SelectionObject>::iterator Jt = SortMap.find(It->pObject);
         if (Jt != SortMap.end()) {
@@ -1186,7 +1186,11 @@ PyObject *SelectionSingleton::sCountObjectsOfType(PyObject * /*self*/, PyObject 
         return NULL;
 
     unsigned int count = Selection().countObjectsOfType(objecttype, document);
+#if PY_MAJOR_VERSION < 3
     return PyInt_FromLong(count);
+#else
+    return PyLong_FromLong(count);
+#endif
 }
 
 PyObject *SelectionSingleton::sGetSelection(PyObject * /*self*/, PyObject *args, PyObject * /*kwd*/)

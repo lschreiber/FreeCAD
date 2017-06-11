@@ -35,8 +35,17 @@ if FreeCAD.GuiUp:
     from DraftTools import translate
 else:
     FreeCADGui = None
+    # \cond
     def translate(ctxt,txt):
         return txt
+    # \endcond
+
+## @package importWebGL
+#  \ingroup ARCH
+#  \brief WebGL file format exporter
+#
+#  This module provides tools to export HTML files containing the 
+#  exported objects in WebGL format and a simple three.js-based viewer.
 
 tab = "                " # the tab size
 wireframeStyle = "faceloop" # this can be "faceloop", "multimaterial" or None
@@ -107,7 +116,7 @@ template = """<!DOCTYPE html>
         </html>"""
 
 
-if open.__module__ == '__builtin__':
+if open.__module__ in ['__builtin__','io']:
     pythonopen = open
     
 def export(exportList,filename):
@@ -146,7 +155,7 @@ def getCameraData():
     else:
         result += "camera.position.set(0,0,1000);\n"
     result += tab+"camera.lookAt( scene.position );\n"+tab
-    # print result
+    # print(result)
     return result
     
 def getObjectData(obj,wireframeMode=wireframeStyle):

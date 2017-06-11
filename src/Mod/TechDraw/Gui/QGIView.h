@@ -27,8 +27,10 @@
 #include <QPen>
 #include <QFont>
 
+#include <App/DocumentObject.h>
 #include <App/PropertyLinks.h>
 #include <Base/Parameter.h>
+#include <Gui/ViewProvider.h>
 
 #include <Mod/TechDraw/App/DrawView.h>
 
@@ -53,12 +55,19 @@ public:
 
     enum {Type = QGraphicsItem::UserType + 101};
     int type() const override { return Type;}
+    virtual QRectF boundingRect() const override;
+    virtual void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+    virtual void paint( QPainter *painter,
+                        const QStyleOptionGraphicsItem *option,
+                        QWidget *widget = nullptr ) override;
 
     const char * getViewName() const;
     void setViewFeature(TechDraw::DrawView *obj);
     TechDraw::DrawView * getViewObject() const;
 
     virtual void toggleBorder(bool state = true);
+    virtual void toggleCache(bool state);
+    virtual void updateView(bool update = false);
     virtual void drawBorder(void);
     virtual void isVisible(bool state) { m_visibility = state; };
     virtual bool isVisible(void) {return m_visibility;};
@@ -77,14 +86,11 @@ public:
     void alignTo(QGraphicsItem*, const QString &alignment);
     void setLocked(bool /*state*/ = true) { locked = true; }
 
-    virtual void toggleCache(bool state);
-    virtual void updateView(bool update = false);
-    virtual void paint( QPainter *painter,
-                        const QStyleOptionGraphicsItem *option,
-                        QWidget *widget = nullptr ) override;
-    virtual QRectF boundingRect() const override;
-
-    virtual void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+    virtual QColor getNormalColor(void);
+    virtual QColor getPreColor(void);
+    virtual QColor getSelectColor(void);
+    
+    static Gui::ViewProvider* getViewProvider(App::DocumentObject* obj);
 
 protected:
     QGIView* getQGIVByName(std::string name);
@@ -99,9 +105,6 @@ protected:
     virtual QRectF customChildrenBoundingRect(void);
     void dumpRect(char* text, QRectF r);
 
-    QColor getNormalColor(void);
-    QColor getPreColor(void);
-    QColor getSelectColor(void);
     QString getPrefFont(void);
     double getPrefFontSize(void);
     Base::Reference<ParameterGrp> getParmGroupCol(void);

@@ -142,42 +142,62 @@ QString UnitsApi::schemaTranslate(const Base::Quantity& quant, double &factor, Q
 
 double UnitsApi::toDbl(PyObject *ArgObj, const Base::Unit &u)
 {
+#if PY_MAJOR_VERSION >= 3
+    if (PyUnicode_Check(ArgObj)) {
+        QString str = QString::fromUtf8(PyUnicode_AsUTF8(ArgObj));
+#else
     if (PyString_Check(ArgObj)) {
-        // Parse the string
         QString str = QString::fromLatin1(PyString_AsString(ArgObj));
+#endif
+        // Parse the string
         Quantity q = Quantity::parse(str);
         if (q.getUnit() == u)
             return q.getValue();
-        throw Base::Exception("Wrong unit type!");
+        throw Base::UnitsMismatchError("Wrong unit type!");
     }
     else if (PyFloat_Check(ArgObj)) {
         return PyFloat_AsDouble(ArgObj);
     }
+#if PY_MAJOR_VERSION < 3
     else if (PyInt_Check(ArgObj)) {
         return static_cast<double>(PyInt_AsLong(ArgObj));
+#else
+    else if (PyLong_Check(ArgObj)) {
+        return static_cast<double>(PyLong_AsLong(ArgObj));
+#endif
     }
     else {
-        throw Base::Exception("Wrong parameter type!");
+        throw Base::UnitsMismatchError("Wrong parameter type!");
     }
 }
 
 Quantity UnitsApi::toQuantity(PyObject *ArgObj, const Base::Unit &u)
 {
     double d;
+#if PY_MAJOR_VERSION >= 3
+    if (PyUnicode_Check(ArgObj)) {
+        QString str = QString::fromUtf8(PyUnicode_AsUTF8(ArgObj));
+#else
     if (PyString_Check(ArgObj)) {
-        // Parse the string
         QString str = QString::fromLatin1(PyString_AsString(ArgObj));
+#endif
+        // Parse the string
         Quantity q = Quantity::parse(str);
         d = q.getValue();
     }
     else if (PyFloat_Check(ArgObj)) {
         d = PyFloat_AsDouble(ArgObj);
     }
+#if PY_MAJOR_VERSION < 3
     else if (PyInt_Check(ArgObj)) {
         d = static_cast<double>(PyInt_AsLong(ArgObj));
+#else
+    else if (PyLong_Check(ArgObj)) {
+        d = static_cast<double>(PyLong_AsLong(ArgObj));
+#endif
     }
     else {
-        throw Base::Exception("Wrong parameter type!");
+        throw Base::UnitsMismatchError("Wrong parameter type!");
     }
 
     return Quantity(d,u);

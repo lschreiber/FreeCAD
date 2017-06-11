@@ -30,6 +30,12 @@ class PathPreferences:
     PostProcessorDefault     = "PostProcessorDefault"
     PostProcessorDefaultArgs = "PostProcessorDefaultArgs"
     PostProcessorBlacklist   = "PostProcessorBlacklist"
+    # Linear tolerance to use when generating Paths, eg when tesselating geometry
+    GeometryTolerance  = "GeometryTolerance"
+
+    @classmethod
+    def preferences(cls):
+        return FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Path")
 
     @classmethod
     def allAvailablePostProcessors(cls):
@@ -58,45 +64,50 @@ class PathPreferences:
 
     @classmethod
     def defaultPostProcessor(cls):
-        preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Path")
-        return preferences.GetString(cls.PostProcessorDefault, "")
+        pref = cls.preferences()
+        return pref.GetString(cls.PostProcessorDefault, "")
 
     @classmethod
     def defaultPostProcessorArgs(cls):
-        preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Path")
-        return preferences.GetString(cls.PostProcessorDefaultArgs, "")
+        pref = cls.preferences()
+        return pref.GetString(cls.PostProcessorDefaultArgs, "")
+
+    @classmethod
+    def defaultGeometryTolerance(cls):
+        return cls.preferences().GetFloat(cls.GeometryTolerance, 0.01)
 
     @classmethod
     def postProcessorBlacklist(cls):
-        preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Path")
-        blacklist = preferences.GetString(cls.PostProcessorBlacklist, "")
+        pref = cls.preferences()
+        blacklist = pref.GetString(cls.PostProcessorBlacklist, "")
         if not blacklist:
             return []
         return eval(blacklist)
 
     @classmethod
-    def savePostProcessorDefaults(cls, processor, args, blacklist):
-        preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Path")
-        preferences.SetString(cls.PostProcessorDefault, processor)
-        preferences.SetString(cls.PostProcessorDefaultArgs, args)
-        preferences.SetString(cls.PostProcessorBlacklist, "%s" % (blacklist))
+    def savePostProcessorDefaults(cls, processor, args, blacklist, geometryTolerance):
+        pref = cls.preferences()
+        pref.SetString(cls.PostProcessorDefault, processor)
+        pref.SetString(cls.PostProcessorDefaultArgs, args)
+        pref.SetString(cls.PostProcessorBlacklist, "%s" % (blacklist))
+        pref.SetFloat(cls.GeometryTolerance, geometryTolerance)
 
 
-    DefaultOutputFile = "DefaultOutputFile"
-    DefaultOutputPolicy = "DefaultOutputPolicy"
+    PostProcessorOutputFile = "PostProcessorOutputFile"
+    PostProcessorOutputPolicy = "PostProcessorOutputPolicy"
 
     @classmethod
     def saveOutputFileDefaults(cls, file, policy):
-        preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Path")
-        preferences.SetString(cls.DefaultOutputFile, file)
-        preferences.SetString(cls.DefaultOutputPolicy, policy)
+        pref = cls.preferences()
+        pref.SetString(cls.PostProcessorOutputFile, file)
+        pref.SetString(cls.PostProcessorOutputPolicy, policy)
 
     @classmethod
     def defaultOutputFile(cls):
-        preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Path")
-        return preferences.GetString(cls.DefaultOutputFile, "")
+        pref = cls.preferences()
+        return pref.GetString(cls.PostProcessorOutputFile, "")
 
     @classmethod
     def defaultOutputPolicy(cls):
-        preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/Path")
-        return preferences.GetString(cls.DefaultOutputPolicy, "")
+        pref = cls.preferences()
+        return pref.GetString(cls.PostProcessorOutputPolicy, "")

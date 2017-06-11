@@ -20,7 +20,6 @@ if (VTK_OPTIONS)
     add_definitions(${VTK_OPTIONS})
 endif()
 
-include(${VTK_USE_FILE})
 include_directories(
     src/SMDS
     src/Driver
@@ -37,7 +36,7 @@ include_directories(
     ${NGLIB_INCLUDE_DIR}
     ${NETGEN_INCLUDE_DIRS}
     ${ZLIB_INCLUDE_DIR}
-    ${VTK_INCLUDE_DIR}
+    ${VTK_INCLUDE_DIRS}
     ${HDF5_INCLUDE_DIR}
     ${MEDFILE_INCLUDE_DIRS}
     ${BOOST_INCLUDE_DIR}
@@ -73,6 +72,16 @@ if(MSVC)
             ${OCC_OCAF_LIBRARIES}
         )
     endif(BUILD_FEM_NETGEN)
+
+    #Universal C runtime introduced in VS 2015 (cl version 19)
+    if (NOT (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "19"))
+        list(APPEND SMESH_LIBS
+            debug vcruntimed.lib
+            debug ucrtd.lib
+            optimized vcruntime.lib
+            optimized ucrt.lib
+        )
+    endif()
 else(MSVC)
     if(BUILD_FEM_NETGEN)
         set(SMESH_LIBS
@@ -265,7 +274,7 @@ SET_BIN_DIR(SMESHDS SMESHDS)
 #########
 FILE(GLOB SMESH_source_files src/SMESH/*.c src/SMESH/*.cpp src/Controls/*.cpp inc/SMESH_*.h*)
 ADD_LIBRARY(SMESH SHARED ${SMESH_source_files})
-TARGET_LINK_LIBRARIES(SMESH SMDS SMESHDS  Driver DriverSTL DriverDAT DriverUNV ${SMESH_LIBS} ${OPENCASCADE_LIBRARIES} ${OCC_LIBRARIES} ${OCC_DEBUG_LIBRARIES} ${OCC_OCAF_DEBUG_LIBRARIES} ${OCC_OCAF_LIBRARIES} ${MEDFILE_LIBRARIES})
+TARGET_LINK_LIBRARIES(SMESH SMDS SMESHDS  Driver DriverSTL DriverDAT DriverUNV ${SMESH_LIBS} ${OPENCASCADE_LIBRARIES} ${OCC_LIBRARIES} ${OCC_DEBUG_LIBRARIES} ${OCC_OCAF_DEBUG_LIBRARIES} ${OCC_OCAF_LIBRARIES} ${MEDFILE_LIBRARIES} ${VTK_LIBRARIES})
  
 SET_BIN_DIR(SMESH SMESH)
 if(WIN32)
@@ -374,6 +383,8 @@ TARGET_LINK_LIBRARIES(NETGENPlugin SMDS SMESHDS SMESH StdMeshers ${SMESH_LIBS} )
 SET_BIN_DIR(NETGENPlugin NETGENPlugin)
 if(WIN32)
     set_target_properties(NETGENPlugin PROPERTIES COMPILE_FLAGS "-DNETGENPLUGIN_EXPORTS -DNO_PARALLEL_THREADS -DOCCGEOMETRY -DNETGEN_VERSION=${NETGEN_VERSION}")
+else()
+    set_target_properties(NETGENPlugin PROPERTIES COMPILE_FLAGS "${NETGEN_CXX_FLAGS}")
 endif(WIN32)
 
 endif (BUILD_FEM_NETGEN)

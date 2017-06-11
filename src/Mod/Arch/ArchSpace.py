@@ -27,7 +27,7 @@ __title__="FreeCAD Arch Space"
 __author__ = "Yorik van Havre"
 __url__ = "http://www.freecadweb.org"
 
-Roles = ["Space"]
+Roles = ["Undefined","Space"]
 
 SpaceTypes = [
 "Undefined",
@@ -157,10 +157,20 @@ if FreeCAD.GuiUp:
     from DraftTools import translate
     from PySide.QtCore import QT_TRANSLATE_NOOP
 else:
+    # \cond
     def translate(ctxt,txt):
         return txt
     def QT_TRANSLATE_NOOP(ctxt,txt):
         return txt
+    # \endcond
+    
+## @package ArchSpace
+#  \ingroup ARCH
+#  \brief The Space object and tools
+#
+#  This module provides tools to build Space objects.
+#  Spaces define an open volume inside or outside a
+#  building, ie. a room.
 
 def makeSpace(objects=None,baseobj=None,name="Space"):
     """makeSpace([objects]): Creates a space object from the given objects. Objects can be one
@@ -219,9 +229,11 @@ class _CommandSpace:
         if sel:
             FreeCADGui.Control.closeDialog()
             if len(sel) == 1:
-                FreeCADGui.doCommand("Arch.makeSpace(FreeCADGui.Selection.getSelection())")
+                FreeCADGui.doCommand("obj = Arch.makeSpace(FreeCADGui.Selection.getSelection())")
             else:
-                FreeCADGui.doCommand("Arch.makeSpace(FreeCADGui.Selection.getSelectionEx())")
+                FreeCADGui.doCommand("obj = Arch.makeSpace(FreeCADGui.Selection.getSelectionEx())")
+            FreeCADGui.addModule("Draft")
+            FreeCADGui.doCommand("Draft.autogroup(obj)")
             FreeCAD.ActiveDocument.commitTransaction()
             FreeCAD.ActiveDocument.recompute()
         else:
@@ -253,6 +265,7 @@ class _Space(ArchComponent.Component):
         obj.SpaceType = SpaceTypes
         obj.Conditioning = ConditioningTypes
         obj.Role = Roles
+        obj.Role = "Space"
         obj.setEditorMode("HorizontalArea",2)
 
     def execute(self,obj):
@@ -280,6 +293,7 @@ class _Space(ArchComponent.Component):
                         obj.EquipmentPower = p
         if hasattr(obj,"Area"):
             obj.setEditorMode('Area',1)
+        ArchComponent.Component.onChanged(self,obj,prop)
 
     def addSubobjects(self,obj,subobjects):
         "adds subobjects to this space"
@@ -300,8 +314,10 @@ class _Space(ArchComponent.Component):
         import Part
         shape = None
         faces = []
+        
+        pl = obj.Placement
 
-        #print "starting compute"
+        #print("starting compute")
         # 1: if we have a base shape, we use it
 
         if obj.Base:
@@ -312,7 +328,7 @@ class _Space(ArchComponent.Component):
 
         # 2: if not, add all bounding boxes of considered objects and build a first shape
         if shape:
-            #print "got shape from base object"
+            #print("got shape from base object")
             bb = shape.BoundBox
         else:
             bb = None
@@ -325,7 +341,7 @@ class _Space(ArchComponent.Component):
             if not bb:
                 return
             shape = Part.makeBox(bb.XLength,bb.YLength,bb.ZLength,FreeCAD.Vector(bb.XMin,bb.YMin,bb.ZMin))
-            #print "created shape from boundbox"
+            #print("created shape from boundbox")
 
         # 3: identifing boundary faces
         goodfaces = []
@@ -334,9 +350,9 @@ class _Space(ArchComponent.Component):
                     if "Face" in b[1]:
                         fn = int(b[1][4:])-1
                         faces.append(b[0].Shape.Faces[fn])
-                        #print "adding face ",fn," of object ",b[0].Name
+                        #print("adding face ",fn," of object ",b[0].Name)
 
-        #print "total: ", len(faces), " faces"
+        #print("total: ", len(faces), " faces")
 
         # 4: get cutvolumes from faces
         cutvolumes = []
@@ -345,22 +361,24 @@ class _Space(ArchComponent.Component):
             f.reverse()
             cutface,cutvolume,invcutvolume = ArchCommands.getCutVolume(f,shape)
             if cutvolume:
-                #print "generated 1 cutvolume"
+                #print("generated 1 cutvolume")
                 cutvolumes.append(cutvolume.copy())
                 #Part.show(cutvolume)
         for v in cutvolumes:
-            #print "cutting"
+            #print("cutting")
             shape = shape.cut(v)
 
         # 5: get the final shape
         if shape:
             if shape.Solids:
-                #print "setting objects shape"
+                #print("setting objects shape")
                 shape = shape.Solids[0]
                 obj.Shape = shape
+                pl = pl.multiply(obj.Placement)
+                obj.Placement = pl
                 return
 
-        print "Arch: error computing space boundary"
+        print("Arch: error computing space boundary")
 
     def getArea(self,obj):
         "returns the horizontal area at the center of the space"
@@ -402,7 +420,7 @@ class _ViewProviderSpace(ArchComponent.ViewProviderComponent):
         vobj.LineColor = (1.0,0.0,0.0,1.0)
         vobj.DrawStyle = "Dotted"
         vobj.addProperty("App::PropertyStringList",    "Text",        "Arch",QT_TRANSLATE_NOOP("App::Property","The text to show. Use $area, $label, $tag, $floor, $walls, $ceiling to insert the respective data"))
-        vobj.addProperty("App::PropertyString",        "FontName",    "Arch",QT_TRANSLATE_NOOP("App::Property","The name of the font"))
+        vobj.addProperty("App::PropertyFont",        "FontName",    "Arch",QT_TRANSLATE_NOOP("App::Property","The name of the font"))
         vobj.addProperty("App::PropertyColor",         "TextColor",   "Arch",QT_TRANSLATE_NOOP("App::Property","The color of the area text"))
         vobj.addProperty("App::PropertyLength",        "FontSize",    "Arch",QT_TRANSLATE_NOOP("App::Property","The size of the text font"))
         vobj.addProperty("App::PropertyLength",        "FirstLine",   "Arch",QT_TRANSLATE_NOOP("App::Property","The size of the first line of text"))
@@ -590,7 +608,7 @@ class SpaceTaskPanel(ArchComponent.ComponentTaskPanel):
         self.editButton.setObjectName("editButton")
         self.editButton.setIcon(QtGui.QIcon(":/icons/Draft_Edit.svg"))
         self.grid.addWidget(self.editButton, 4, 0, 1, 2)
-        self.editButton.setText(QtGui.QApplication.translate("Arch", "Set text position", None, QtGui.QApplication.UnicodeUTF8))
+        self.editButton.setText(QtGui.QApplication.translate("Arch", "Set text position", None))
         QtCore.QObject.connect(self.editButton, QtCore.SIGNAL("clicked()"), self.setTextPos)
         
     def setTextPos(self):

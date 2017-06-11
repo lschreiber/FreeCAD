@@ -35,7 +35,7 @@ namespace App
 
 /** Base class of all geometric document objects.
  */
-class AppExport Part : public App::DocumentObject, public App::OriginGroupExtension
+class AppExport Part : public App::GeoFeature, public App::OriginGroupExtension
 {
     PROPERTY_HEADER_WITH_EXTENSIONS(App::Part);
 
@@ -52,9 +52,9 @@ public:
     App::PropertyString  Id;
     /// unique identifier of the Item
     App::PropertyUUID    Uid;
-    /// material descriptons
+    /// material descriptions
     App::PropertyMap     Material;
-    /// Meta descriptons
+    /// Meta descriptions
     App::PropertyMap     Meta;
 
     /** License string
@@ -62,7 +62,7 @@ public:
     * for the Creative Commons license suit.
     */
     App::PropertyString  License;
-    /// License descripton/contract URL
+    /// License description/contract URL
     App::PropertyString  LicenseURL;
     //@}
 

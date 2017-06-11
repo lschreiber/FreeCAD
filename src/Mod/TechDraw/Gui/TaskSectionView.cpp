@@ -43,11 +43,13 @@
 #include <Mod/Part/App/PartFeature.h>
 
 #include <Mod/TechDraw/App/DrawPage.h>
+#include <Mod/TechDraw/App/DrawUtil.h>
 
 #include "TaskSectionView.h"
 #include <Mod/TechDraw/Gui/ui_TaskSectionView.h>
 
 using namespace Gui;
+using namespace TechDraw;
 using namespace TechDrawGui;
 
 void _printVect(char* label, Base::Vector3d v);
@@ -70,6 +72,7 @@ TaskSectionView::TaskSectionView(TechDraw::DrawViewPart* base, TechDraw::DrawVie
     connect(ui->pbReset, SIGNAL(clicked(bool)),
             this, SLOT(onResetClicked(bool)));
 
+    sectionDir = "unset";
     saveInitialValues();
     resetValues();
 }
@@ -97,6 +100,7 @@ void TaskSectionView::resetValues()
     checkAll(false);
     enableAll(true);
 
+    sectionDir = "unset";
     sectionProjDir = saveSectionProjDir;
     sectionNormal = saveSectionNormal;
 
@@ -114,76 +118,49 @@ void TaskSectionView::resetValues()
 }
 
 //calculate good starting points from base view and push buttons
-void TaskSectionView::calcValues()
+bool TaskSectionView::calcValues()
 {
-    Base::Vector3d stdX(1.0,0.0,0.0);
-    Base::Vector3d stdY(0.0,1.0,0.0);
-    Base::Vector3d stdZ(0.0,0.0,1.0);
-    Base::Vector3d view = m_base->Direction.getValue();
-    sectionDir = "unset";
+    bool result = true;
 
     if (ui->pb_Up->isChecked()) {
         sectionDir = "Up";
-        sectionProjDir = view;
-        sectionNormal  = Base::Vector3d(view.x,view.z,-view.y);
-        if (view == stdZ) {
-            sectionProjDir = (-1.0 * stdY);
-            sectionNormal  = (-1.0 * stdY);
-        } else if (view == (-1.0 * stdZ)) {
-            sectionProjDir = (-1.0 * stdY);
-            sectionNormal  = (-1.0 * stdY);
-        }
+        sectionProjDir = m_section->getSectionVector(sectionDir);
     } else if (ui->pb_Down->isChecked()) {
         sectionDir = "Down";
-        sectionProjDir = view;
-        sectionNormal  = Base::Vector3d(-view.x,-view.z,view.y);
-        if (view == stdZ) {
-            sectionProjDir = stdY;
-            sectionNormal  = stdY;
-        } else if (view == (-1.0 * stdZ)) {
-            sectionProjDir = stdY;
-            sectionNormal  = stdY;
-        }
+        sectionProjDir = m_section->getSectionVector(sectionDir);
     } else if (ui->pb_Left->isChecked()) {
         sectionDir = "Left";
-        sectionProjDir = Base::Vector3d(-view.y,view.x,view.z);
-        sectionNormal  = Base::Vector3d(-view.y,view.x,0.0);
-        if (view == stdZ) {
-            sectionProjDir = stdX;
-            sectionNormal  = stdX;
-        } else if (view == (-1.0 * stdZ)) {
-            sectionProjDir = stdX;
-            sectionNormal  = stdX;
-        }
+        sectionProjDir = m_section->getSectionVector(sectionDir);
     } else if (ui->pb_Right->isChecked()) {
-        sectionProjDir = Base::Vector3d(view.y,-view.x,view.z);
-        sectionNormal  = Base::Vector3d(view.y,-view.x,0.0);
-        if (view == stdZ) {
-            sectionProjDir = -1.0 * stdX;
-            sectionNormal  = -1.0 * stdX;
-        } else if (view == (-1.0 * stdZ)) {
-            sectionProjDir = -1.0 * stdX;
-            sectionNormal  = -1.0 * stdX;
-        }
+        sectionDir = "Right";
+        sectionProjDir = m_section->getSectionVector(sectionDir);
+    } else {
+        Base::Console().Message("Select a direction\n");
+        result = false;
     }
 
-    ui->leNormal->setText(formatVector(sectionNormal));
-    ui->leProjDir->setText(formatVector(sectionProjDir));
+    sectionNormal = sectionProjDir;
+    if (result) {
+        ui->leNormal->setText(formatVector(sectionNormal));
+        ui->leProjDir->setText(formatVector(sectionProjDir));
 
-    Base::Console().Message("Press Reset, OK or Cancel to continue\n");
+        Base::Console().Message("Press Reset, OK or Cancel to continue \n");
+    }
+    return result;
 }
 
 //move values from screen to DocObjs
 void TaskSectionView::updateValues()
 {
-    m_section->SectionDirection.setValue(sectionDir);
+    if (strcmp(sectionDir,"unset") != 0) {
+        m_section->SectionDirection.setValue(sectionDir);
+    }
     m_section->Direction.setValue(sectionProjDir);
     m_section->SectionNormal.setValue(sectionNormal);
     Base::Vector3d origin(ui->sb_OrgX->value().getValue(),
                           ui->sb_OrgY->value().getValue(),
                           ui->sb_OrgZ->value().getValue());
     m_section->SectionOrigin.setValue(origin);
-    m_section->SectionDirection.setValue(sectionDir);
     m_section->SectionSymbol.setValue(ui->leSymbol->text().toUtf8().constData());
 
     m_base->touch();
@@ -206,8 +183,9 @@ void TaskSectionView::turnOnUp()
     ui->pb_Up->setChecked(true);
     ui->pb_Up->setEnabled(true);
     blockButtons(false);
-    calcValues();
-    updateValues();
+    if (calcValues()) {
+        updateValues();
+    }
 }
 
 void TaskSectionView::turnOnDown()
@@ -218,8 +196,9 @@ void TaskSectionView::turnOnDown()
     ui->pb_Down->setChecked(true);
     ui->pb_Down->setEnabled(true);
     blockButtons(false);
-    calcValues();
-    updateValues();
+    if (calcValues()) {
+        updateValues();
+    }
 }
 
 void TaskSectionView::turnOnLeft()
@@ -230,8 +209,9 @@ void TaskSectionView::turnOnLeft()
     ui->pb_Left->setChecked(true);
     ui->pb_Left->setEnabled(true);
     blockButtons(false);
-    calcValues();
-    updateValues();
+    if (calcValues()) {
+        updateValues();
+    }
 }
 
 void TaskSectionView::turnOnRight()
@@ -242,8 +222,9 @@ void TaskSectionView::turnOnRight()
     ui->pb_Right->setChecked(true);
     ui->pb_Right->setEnabled(true);
     blockButtons(false);
-    calcValues();
-    updateValues();
+    if (calcValues()) {
+        updateValues();
+    }
 }
 
 void TaskSectionView::checkAll(bool b)
@@ -302,8 +283,14 @@ void TaskSectionView::onResetClicked(bool b)
 
 bool TaskSectionView::accept()
 {
-    updateValues();
-    return true;
+    if (strcmp(sectionDir,"unset") == 0) {
+        Base::Console().Message("No direction selected!\n");
+        return reject();
+    } else {
+        updateValues();
+        Gui::Command::doCommand(Gui::Command::Gui,"Gui.ActiveDocument.resetEdit()");
+        return true;
+    }
 }
 
 bool TaskSectionView::reject()
@@ -314,6 +301,9 @@ bool TaskSectionView::reject()
     Gui::Command::doCommand(Gui::Command::Gui,"App.activeDocument().%s.removeView(App.activeDocument().%s)",
                             PageName.c_str(),SectionName.c_str());
     Gui::Command::doCommand(Gui::Command::Gui,"App.activeDocument().removeObject('%s')",SectionName.c_str());
+    Gui::Command::doCommand(Gui::Command::Gui,"Gui.ActiveDocument.resetEdit()");
+    m_base->touch();
+    m_base->getDocument()->recompute();
     return false;
 }
 

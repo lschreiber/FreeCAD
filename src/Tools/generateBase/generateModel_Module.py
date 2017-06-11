@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 
 #
-# Generated Thu Jul 22 14:11:34 2010 by generateDS.py.
+# Generated Thu Apr 27 21:48:12 2017 by generateDS.py.
+# Update it with: python generateDS.py -o generateModel_Module.py generateMetaModel_Module.xsd
 #
+# WARNING! All changes made in this file will be lost!
+#
+
+from __future__ import print_function # this allows py2 to print(str1,str2) correctly
 
 import sys
 import getopt
@@ -216,14 +221,17 @@ class GenerateModel:
 
 class PythonExport:
     subclass = None
-    def __init__(self, FatherNamespace='', RichCompare=0, Name='', Reference=0, FatherInclude='', Father='', Namespace='', Twin='', Constructor=0, TwinPointer='', Include='', NumberProtocol=0, Delete=0, Documentation=None, Methode=None, Attribute=None, Sequence=None, CustomAttributes='', ClassDeclarations='', Initialization=0):
+    def __init__(self, FatherNamespace='', DisableNotify=0, RichCompare=0, Name='', Reference=0, FatherInclude='', Namespace='', Initialization=0, Father='', PythonName='', Twin='', Constructor=0, TwinPointer='', Include='', NumberProtocol=0, Delete=0, Documentation=None, Methode=None, Attribute=None, Sequence=None, CustomAttributes='', ClassDeclarations=''):
         self.FatherNamespace = FatherNamespace
+        self.DisableNotify = DisableNotify
         self.RichCompare = RichCompare
         self.Name = Name
         self.Reference = Reference
         self.FatherInclude = FatherInclude
-        self.Father = Father
         self.Namespace = Namespace
+        self.Initialization = Initialization
+        self.Father = Father
+        self.PythonName = PythonName
         self.Twin = Twin
         self.Constructor = Constructor
         self.TwinPointer = TwinPointer
@@ -231,7 +239,6 @@ class PythonExport:
         self.NumberProtocol = NumberProtocol
         self.Delete = Delete
         self.Documentation = Documentation
-        self.Initialization = Initialization
         if Methode is None:
             self.Methode = []
         else:
@@ -249,8 +256,6 @@ class PythonExport:
         else:
             return PythonExport(*args_, **kwargs_)
     factory = staticmethod(factory)
-    def getInitialization(self): return self.Initialization
-    def setInitialization(self, Initialization): self.Initialization = Initialization
     def getDocumentation(self): return self.Documentation
     def setDocumentation(self, Documentation): self.Documentation = Documentation
     def getMethode(self): return self.Methode
@@ -269,6 +274,8 @@ class PythonExport:
     def setClassdeclarations(self, ClassDeclarations): self.ClassDeclarations = ClassDeclarations
     def getFathernamespace(self): return self.FatherNamespace
     def setFathernamespace(self, FatherNamespace): self.FatherNamespace = FatherNamespace
+    def getDisablenotify(self): return self.DisableNotify
+    def setDisablenotify(self, DisableNotify): self.DisableNotify = DisableNotify
     def getRichcompare(self): return self.RichCompare
     def setRichcompare(self, RichCompare): self.RichCompare = RichCompare
     def getName(self): return self.Name
@@ -277,10 +284,14 @@ class PythonExport:
     def setReference(self, Reference): self.Reference = Reference
     def getFatherinclude(self): return self.FatherInclude
     def setFatherinclude(self, FatherInclude): self.FatherInclude = FatherInclude
-    def getFather(self): return self.Father
-    def setFather(self, Father): self.Father = Father
     def getNamespace(self): return self.Namespace
     def setNamespace(self, Namespace): self.Namespace = Namespace
+    def getInitialization(self): return self.Initialization
+    def setInitialization(self, Initialization): self.Initialization = Initialization
+    def getFather(self): return self.Father
+    def setFather(self, Father): self.Father = Father
+    def getPythonname(self): return self.PythonName
+    def setPythonname(self, PythonName): self.PythonName = PythonName
     def getTwin(self): return self.Twin
     def setTwin(self, Twin): self.Twin = Twin
     def getConstructor(self): return self.Constructor
@@ -303,19 +314,23 @@ class PythonExport:
         outfile.write('</%s>\n' % name_)
     def exportAttributes(self, outfile, level, name_='PythonExport'):
         outfile.write(' FatherNamespace="%s"' % (self.getFathernamespace(), ))
+        if self.getDisablenotify() is not None:
+            outfile.write(' DisableNotify="%s"' % (self.getDisablenotify(), ))
         if self.getRichcompare() is not None:
             outfile.write(' RichCompare="%s"' % (self.getRichcompare(), ))
         outfile.write(' Name="%s"' % (self.getName(), ))
         if self.getReference() is not None:
             outfile.write(' Reference="%s"' % (self.getReference(), ))
         outfile.write(' FatherInclude="%s"' % (self.getFatherinclude(), ))
-        outfile.write(' Father="%s"' % (self.getFather(), ))
         outfile.write(' Namespace="%s"' % (self.getNamespace(), ))
+        if self.getInitialization() is not None:
+            outfile.write(' Initialization="%s"' % (self.getInitialization(), ))
+        outfile.write(' Father="%s"' % (self.getFather(), ))
+        if self.getPythonname() is not None:
+            outfile.write(' PythonName="%s"' % (self.getPythonname(), ))
         outfile.write(' Twin="%s"' % (self.getTwin(), ))
         if self.getConstructor() is not None:
             outfile.write(' Constructor="%s"' % (self.getConstructor(), ))
-        if self.getInitialization() is not None:
-            outfile.write(' Initialization="%s"' % (self.getInitialization(), ))
         outfile.write(' TwinPointer="%s"' % (self.getTwinpointer(), ))
         outfile.write(' Include="%s"' % (self.getInclude(), ))
         if self.getNumberprotocol() is not None:
@@ -343,6 +358,8 @@ class PythonExport:
         showIndent(outfile, level)
         outfile.write('FatherNamespace = "%s",\n' % (self.getFathernamespace(),))
         showIndent(outfile, level)
+        outfile.write('DisableNotify = "%s",\n' % (self.getDisablenotify(),))
+        showIndent(outfile, level)
         outfile.write('RichCompare = "%s",\n' % (self.getRichcompare(),))
         showIndent(outfile, level)
         outfile.write('Name = "%s",\n' % (self.getName(),))
@@ -351,15 +368,18 @@ class PythonExport:
         showIndent(outfile, level)
         outfile.write('FatherInclude = "%s",\n' % (self.getFatherinclude(),))
         showIndent(outfile, level)
+        outfile.write('Namespace = "%s",\n' % (self.getNamespace(),))
+        showIndent(outfile, level)
+        outfile.write('Initialization = "%s",\n' % (self.getInitialization(),))
+        showIndent(outfile, level)
         outfile.write('Father = "%s",\n' % (self.getFather(),))
         showIndent(outfile, level)
-        outfile.write('Namespace = "%s",\n' % (self.getNamespace(),))
+        outfile.write('PythonName = "%s",\n' % (self.getPythonname(),))
         showIndent(outfile, level)
         outfile.write('Twin = "%s",\n' % (self.getTwin(),))
         showIndent(outfile, level)
         outfile.write('Constructor = "%s",\n' % (self.getConstructor(),))
         showIndent(outfile, level)
-        outfile.write('Initialization = "%s",\n' % (self.getInitialization(),))
         outfile.write('TwinPointer = "%s",\n' % (self.getTwinpointer(),))
         showIndent(outfile, level)
         outfile.write('Include = "%s",\n' % (self.getInclude(),))
@@ -417,6 +437,13 @@ class PythonExport:
     def buildAttributes(self, attrs):
         if attrs.get('FatherNamespace'):
             self.FatherNamespace = attrs.get('FatherNamespace').value
+        if attrs.get('DisableNotify'):
+            if attrs.get('DisableNotify').value in ('true', '1'):
+                self.DisableNotify = 1
+            elif attrs.get('DisableNotify').value in ('false', '0'):
+                self.DisableNotify = 0
+            else:
+                raise ValueError('Bad boolean attribute (DisableNotify)')
         if attrs.get('RichCompare'):
             if attrs.get('RichCompare').value in ('true', '1'):
                 self.RichCompare = 1
@@ -435,10 +462,19 @@ class PythonExport:
                 raise ValueError('Bad boolean attribute (Reference)')
         if attrs.get('FatherInclude'):
             self.FatherInclude = attrs.get('FatherInclude').value
-        if attrs.get('Father'):
-            self.Father = attrs.get('Father').value
         if attrs.get('Namespace'):
             self.Namespace = attrs.get('Namespace').value
+        if attrs.get('Initialization'):
+            if attrs.get('Initialization').value in ('true', '1'):
+                self.Initialization = 1
+            elif attrs.get('Initialization').value in ('false', '0'):
+                self.Initialization = 0
+            else:
+                raise ValueError('Bad boolean attribute (Initialization)')
+        if attrs.get('Father'):
+            self.Father = attrs.get('Father').value
+        if attrs.get('PythonName'):
+            self.PythonName = attrs.get('PythonName').value
         if attrs.get('Twin'):
             self.Twin = attrs.get('Twin').value
         if attrs.get('Constructor'):
@@ -448,13 +484,6 @@ class PythonExport:
                 self.Constructor = 0
             else:
                 raise ValueError('Bad boolean attribute (Constructor)')
-        if attrs.get('Initialization'):
-            if attrs.get('Initialization').value in ('true', '1'):
-                self.Initialization = 1
-            elif attrs.get('Initialization').value in ('false', '0'):
-                self.Initialization = 0
-            else:
-                raise ValueError('Bad boolean attribute (Initialization)')
         if attrs.get('TwinPointer'):
             self.TwinPointer = attrs.get('TwinPointer').value
         if attrs.get('Include'):
@@ -506,11 +535,6 @@ class PythonExport:
             for text__content_ in child_.childNodes:
                 ClassDeclarations_ += text__content_.nodeValue
             self.ClassDeclarations = ClassDeclarations_
-        elif child_.nodeType == Node.ELEMENT_NODE and \
-            nodeName_ == 'Initialization':
-            obj_ = Documentation.factory()
-            obj_.build(child_)
-            self.setDocumentation(obj_)
 # end class PythonExport
 
 
@@ -1786,7 +1810,7 @@ class SaxGeneratemodelHandler(handler.ContentHandler):
         self.locator = locator
     
     def showError(self, msg):
-        print '*** (showError):', msg
+        print('*** (showError):', msg)
         sys.exit(-1)
 
     def startElement(self, name, attrs):
@@ -1806,6 +1830,14 @@ class SaxGeneratemodelHandler(handler.ContentHandler):
             val = attrs.get('FatherNamespace', None)
             if val is not None:
                 obj.setFathernamespace(val)
+            val = attrs.get('DisableNotify', None)
+            if val is not None:
+                if val in ('true', '1'):
+                    obj.setDisablenotify(1)
+                elif val in ('false', '0'):
+                    obj.setDisablenotify(0)
+                else:
+                    self.reportError('"DisableNotify" attribute must be boolean ("true", "1", "false", "0")')
             val = attrs.get('RichCompare', None)
             if val is not None:
                 if val in ('true', '1'):
@@ -1828,12 +1860,23 @@ class SaxGeneratemodelHandler(handler.ContentHandler):
             val = attrs.get('FatherInclude', None)
             if val is not None:
                 obj.setFatherinclude(val)
-            val = attrs.get('Father', None)
-            if val is not None:
-                obj.setFather(val)
             val = attrs.get('Namespace', None)
             if val is not None:
                 obj.setNamespace(val)
+            val = attrs.get('Initialization', None)
+            if val is not None:
+                if val in ('true', '1'):
+                    obj.setInitialization(1)
+                elif val in ('false', '0'):
+                    obj.setInitialization(0)
+                else:
+                    self.reportError('"Initialization" attribute must be boolean ("true", "1", "false", "0")')
+            val = attrs.get('Father', None)
+            if val is not None:
+                obj.setFather(val)
+            val = attrs.get('PythonName', None)
+            if val is not None:
+                obj.setPythonname(val)
             val = attrs.get('Twin', None)
             if val is not None:
                 obj.setTwin(val)
@@ -1845,14 +1888,6 @@ class SaxGeneratemodelHandler(handler.ContentHandler):
                     obj.setConstructor(0)
                 else:
                     self.reportError('"Constructor" attribute must be boolean ("true", "1", "false", "0")')
-            val = attrs.get('Initialization', None)
-            if val is not None:
-                if val in ('true', '1'):
-                    obj.setInitialization(1)
-                elif val in ('false', '0'):
-                    obj.setInitialization(0)
-                else:
-                    self.reportError('"Initialization" attribute must be boolean ("true", "1", "false", "0")')
             val = attrs.get('TwinPointer', None)
             if val is not None:
                 obj.setTwinpointer(val)
@@ -2233,7 +2268,7 @@ Options:
 """
 
 def usage():
-    print USAGE_TEXT
+    print(USAGE_TEXT)
     sys.exit(-1)
 
 
@@ -2262,10 +2297,10 @@ def parseSelect(inFileName):
         except StopIteration:
             topElementName = documentHandler.getTopElementName()
         if topElementName is None:
-            raise RuntimeError, 'no top level element'
+            raise RuntimeError('no top level element')
         topElementName = topElementName.replace('-', '_').replace(':', '_')
         if topElementName not in globals():
-            raise RuntimeError, 'no class for top element: %s' % topElementName
+            raise RuntimeError('no class for top element: %s' % topElementName)
         topElement = globals()[topElementName]
         infile.seek(0)
         doc = minidom.parse(infile)

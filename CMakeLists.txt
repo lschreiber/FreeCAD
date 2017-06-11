@@ -4,7 +4,7 @@ set(PACKAGE_NAME "FreeCAD")
 set(PACKAGE_VERSION_NAME "Vulcan")
 set(PACKAGE_VERSION_MAJOR "0")
 set(PACKAGE_VERSION_MINOR "17")
-set(PACKAGE_VERSION_PATCH "6700")
+set(PACKAGE_VERSION_PATCH "10000")
 
 set(FREECAD_VERSION "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}")
 set(PACKAGE_VERSION "${PACKAGE_VERSION_MAJOR}.${PACKAGE_VERSION_MINOR}.${PACKAGE_VERSION_PATCH}")
@@ -14,6 +14,9 @@ cmake_minimum_required(VERSION 2.8.0 FATAL_ERROR)
 
 if(COMMAND cmake_policy)
     cmake_policy(SET CMP0003 NEW)
+    if(POLICY CMP0020)
+        cmake_policy(SET CMP0020 NEW)
+    endif(POLICY CMP0020)
     # added in cmake 3.0
     if(POLICY CMP0050)
         cmake_policy(SET CMP0050 OLD)
@@ -97,6 +100,13 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_COMPILER_IS_CLANGXX)
     endif()
 endif(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_COMPILER_IS_CLANGXX)
 
+if(CMAKE_COMPILER_IS_CLANGXX)
+    # older boost.preprocessor turn off variadics for clang
+    add_definitions(-DBOOST_PP_VARIADICS=1)
+    message(STATUS "Force BOOST_PP_VARIADICS=1 for clang")
+endif()
+
+
 # ================================================================================
 # Output directories for install target
 
@@ -150,6 +160,8 @@ endif(MSVC)
 # ==============================================================================
 # == All the options for the build process    ============
 
+# Switch to build FreeCAD with Qt5
+OPTION(BUILD_QT5 "Build with Qt5." OFF)
 OPTION(BUILD_GUI "Build FreeCAD Gui. Otherwise you have only the command line and the Python import module." ON)
 OPTION(FREECAD_MAINTAINERS_BUILD "Build FreeCAD for Maintainers, with Docu and 3rd party libs. On Windows the Installer is build." OFF)
 OPTION(FREECAD_USE_EXTERNAL_ZIPIOS "Use system installed zipios++ instead of the bundled." OFF)
@@ -157,6 +169,21 @@ OPTION(FREECAD_USE_EXTERNAL_SMESH "Use system installed smesh instead of the bun
 OPTION(FREECAD_USE_EXTERNAL_KDL "Use system installed orocos-kdl instead of the bundled." OFF)
 OPTION(FREECAD_USE_FREETYPE "Builds the features using FreeType libs" ON)
 OPTION(FREECAD_BUILD_DEBIAN "Prepare for a build of a Debian package" OFF)
+
+# https://blog.kitware.com/constraining-values-with-comboboxes-in-cmake-cmake-gui/
+set(FREECAD_USE_OCC_VARIANT "Community Edition"  CACHE STRING  "Official OpenCASCADE version or community edition")
+set_property(CACHE FREECAD_USE_OCC_VARIANT PROPERTY STRINGS
+             "Official Version"
+             "Community Edition"
+)
+
+if (BUILD_QT5)
+  OPTION(FREECAD_USE_QTOPENGL_WIDGET "Replace QGLWidget with QOpenGLWidget." ON)
+  if (FREECAD_USE_QTOPENGL_WIDGET)
+    set(HAVE_QT5_OPENGL 1)
+  endif()
+endif()
+configure_file(${CMAKE_SOURCE_DIR}/src/QtOpenGL.h.cmake ${CMAKE_BINARY_DIR}/src/QtOpenGL.h)
 
 if(APPLE)
     OPTION(FREECAD_CREATE_MAC_APP "Create app bundle on install" OFF)
@@ -179,11 +206,13 @@ if(APPLE)
             ${CMAKE_INSTALL_PREFIX}/${PACKAGE_NAME}.app/Contents)
         set(CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_PREFIX}/lib)
     endif(FREECAD_CREATE_MAC_APP)
+    set(CMAKE_MACOSX_RPATH TRUE)
 endif(APPLE)
 
 OPTION(BUILD_FEM "Build the FreeCAD FEM module" ON)
 OPTION(BUILD_SANDBOX "Build the FreeCAD Sandbox module which is only for testing purposes" OFF)
 OPTION(BUILD_TEMPLATE "Build the FreeCAD template module which is only for testing purposes" OFF)
+OPTION(BUILD_ADDONMGR "Build the FreeCAD addon manager module" ON)
 OPTION(BUILD_ARCH "Build the FreeCAD Architecture module" ON)
 OPTION(BUILD_ASSEMBLY "Build the FreeCAD Assembly module" OFF)
 OPTION(BUILD_COMPLETE "Build the FreeCAD complete module" ON)
@@ -213,7 +242,9 @@ OPTION(BUILD_SPREADSHEET "Build the FreeCAD spreadsheet module" ON)
 OPTION(BUILD_START "Build the FreeCAD start module" ON)
 OPTION(BUILD_TEST "Build the FreeCAD test module" ON)
 OPTION(BUILD_TECHDRAW "Build the FreeCAD Technical Drawing module" ON)
+OPTION(BUILD_TUX "Build the FreeCAD Tux module" ON)
 OPTION(BUILD_WEB "Build the FreeCAD web module" ON)
+OPTION(BUILD_SURFACE "Build the FreeCAD surface module" ON)
 OPTION(BUILD_VR "Build the FreeCAD Oculus Rift support (need Oculus SDK 4.x or higher)" OFF)
 
 if(MSVC)
@@ -242,6 +273,12 @@ if (FREECAD_BUILD_DEBIAN)
 endif (FREECAD_BUILD_DEBIAN)
 if(BUILD_FEM)
     set(BUILD_SMESH ON)
+endif()
+
+# for Windows the minimum required cmake version is 3.4.3 to build the Path module
+if(WIN32 AND CMAKE_VERSION VERSION_LESS 3.4.3)
+    message(WARNING "Disable Path, requires cmake >= 3.4.3 in order to build this module")
+    set(BUILD_PATH OFF)
 endif()
 
 # ==============================================================================
@@ -357,10 +394,6 @@ if(FREECAD_LIBPACK_USE)
                 "==================================================\n")
     ENDIF(NOT SWIG_FOUND)
 
-# -------------------------------- Shiboken/PySide ------------------------
-
-    find_package(PySideTools REQUIRED) # Pyside utilities (pyside-uic & pyside-rcc)
-
 # -------------------------------- Salome SMESH --------------------------
 
     if(NOT FREECAD_USE_EXTERNAL_SMESH)
@@ -377,9 +410,9 @@ if(NOT FREECAD_LIBPACK_USE OR FREECAD_LIBPACK_CHECKFILE_CLBUNDLER)
 
 # -------------------------------- Python --------------------------------
 
-#http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=677598
+# http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=677598
 # Acceptable versions of Python
-set(Python_ADDITIONAL_VERSIONS "2.5" "2.6" "2.7" "2.8" "2.9")
+set(Python_ADDITIONAL_VERSIONS "2.7")
 
 # For building on OS X
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -507,6 +540,13 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
         MESSAGE(FATAL_ERROR "=================================\n"
                             "Python not found, install Python!\n"
                             "=================================\n")
+    ELSE(NOT PYTHONLIBS_FOUND)
+        # prevent python3 lower than 3.3 (not enough utf8<->unicode tools)
+        IF(PYTHON_VERSION_MAJOR EQUAL 3)
+            IF(PYTHON_VERSION_MINOR LESS 4)
+                MESSAGE(FATAL_ERROR "To build FreeCAD with Python3, you need at least version 3.4\n")
+            ENDIF(PYTHON_VERSION_MINOR LESS 4)
+        ENDIF(PYTHON_VERSION_MAJOR EQUAL 3)
     ENDIF(NOT PYTHONLIBS_FOUND)
 
 # -------------------------------- pcl ----------------------------------
@@ -565,8 +605,41 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
     # Salome SMESH sources are under src/3rdParty now
     IF(BUILD_SMESH)
-        #if we use smesh we definitly also need vtk, no matter of external or internal smesh
-        find_package(VTK REQUIRED) #don't check VERSION 6 as this would exclude version 7
+        #if we use smesh we definitely also need vtk, no matter of external or internal smesh
+        set (VTK_COMPONENTS
+            vtkCommonCore
+            vtkCommonDataModel
+            vtkFiltersVerdict
+            vtkIOXML
+            vtkFiltersCore
+            vtkFiltersGeneral
+            vtkIOLegacy
+            vtkFiltersExtraction
+            vtkFiltersSources
+            vtkFiltersGeometry
+        )
+
+        # check which modules are available
+        if(UNIX OR WIN32)
+            find_package(VTK COMPONENTS vtkCommonCore REQUIRED NO_MODULE)
+            list(APPEND VTK_COMPONENTS vtkIOMPIParallel vtkParallelMPI vtkhdf5)
+            foreach(_module ${VTK_COMPONENTS})
+                list (FIND VTK_MODULES_ENABLED ${_module} _index)
+                if (${_index} GREATER -1)
+                    list(APPEND AVAILABLE_VTK_COMPONENTS ${_module})
+                endif()
+            endforeach()
+        endif()
+
+        # don't check VERSION 6 as this would exlude VERSION 7
+        if(AVAILABLE_VTK_COMPONENTS)
+            message(STATUS "VTK components: ${AVAILABLE_VTK_COMPONENTS}")
+            find_package(VTK COMPONENTS ${AVAILABLE_VTK_COMPONENTS} REQUIRED NO_MODULE)
+        else()
+            message(STATUS "VTK components: not found or used")
+            find_package(VTK REQUIRED NO_MODULE)
+        endif()
+
         set(BUILD_FEM_VTK ON)
         if(${VTK_MAJOR_VERSION} LESS 6)
             message( FATAL_ERROR "Found VTK version is <6, this is not compatible" )
@@ -576,10 +649,12 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
                 set(VTK_OPTIONS -DVTK_NO_QUAD_POLY)
             endif()
             if(${VTK_MINOR_VERSION} EQUAL 0)
-                message(WARNING "VTK <6.0 cannot be used with c++11, FEM postprocessing is disabled")
+                message(WARNING "VTK equal to 6.0 cannot be used with c++11, FEM postprocessing is disabled")
                 set(BUILD_FEM_VTK OFF)
             endif()
         endif()
+        # on openSUSE 13.1 VTK_LIBRARIES ends with "optimized" keyword
+        list(REMOVE_ITEM VTK_LIBRARIES "optimized" "debug")
 
         if(NOT FREECAD_USE_EXTERNAL_SMESH)
             # See https://www.hdfgroup.org/HDF5/release/cmakebuild.html
@@ -634,66 +709,110 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 # -------------------------------- Qt --------------------------------
 
-# sets ${QT_LIBRARIES}
-
-    # If using MacPorts, help the Qt4 finder.
-    if(MACPORTS_PREFIX)
-        if(NOT QT_QMAKE_EXECUTABLE)
-            set(QT_QMAKE_EXECUTABLE ${MACPORTS_PREFIX}/libexec/qt4/bin/qmake)
+    if (NOT BUILD_QT5)
+        # If using MacPorts, help the Qt4 finder.
+        if(MACPORTS_PREFIX)
+            if(NOT QT_QMAKE_EXECUTABLE)
+                set(QT_QMAKE_EXECUTABLE ${MACPORTS_PREFIX}/libexec/qt4/bin/qmake)
+            endif()
         endif()
-    endif()
 
-    SET(QT_MIN_VERSION 4.5.0)
-    set(QT_USE_QTNETWORK TRUE)
-    set(QT_USE_QTXML TRUE)
-    if(BUILD_GUI)
-        set(QT_USE_QTOPENGL TRUE)
-        set(QT_USE_QTSVG TRUE)
-        set(QT_USE_QTUITOOLS TRUE)
-        set(QT_USE_QTWEBKIT TRUE)
-    endif(BUILD_GUI)
+        SET(QT_MIN_VERSION 4.5.0)
+        set(QT_USE_QTNETWORK TRUE)
+        set(QT_USE_QTXML TRUE)
+        if(BUILD_GUI)
+            set(QT_USE_QTOPENGL TRUE)
+            set(QT_USE_QTSVG TRUE)
+            set(QT_USE_QTUITOOLS TRUE)
+            set(QT_USE_QTWEBKIT TRUE)
+        endif(BUILD_GUI)
 
-    find_package(Qt4)# REQUIRED
+        find_package(Qt4)# REQUIRED
 
-    include(${QT_USE_FILE})
+        include(${QT_USE_FILE})
 
-    IF(NOT QT4_FOUND)
-        MESSAGE(FATAL_ERROR "========================\n"
-                            "Qt4 libraries not found.\n"
-                            "========================\n")
-    ENDIF(NOT QT4_FOUND)
+        IF(NOT QT4_FOUND)
+            MESSAGE(FATAL_ERROR "========================\n"
+                                "Qt4 libraries not found.\n"
+                                "========================\n")
+        ENDIF(NOT QT4_FOUND)
 
-    IF(NOT QT_QTWEBKIT_FOUND)
-        MESSAGE("========================================================\n"
-                "Qt Webkit not found, will not build browser integration.\n"
-                "========================================================\n")
-    ENDIF(NOT QT_QTWEBKIT_FOUND)
+        IF(NOT QT_QTWEBKIT_FOUND)
+            MESSAGE("========================================================\n"
+                    "Qt Webkit not found, will not build browser integration.\n"
+                    "========================================================\n")
+        ENDIF(NOT QT_QTWEBKIT_FOUND)
 
+        # This is a special version of the built in macro qt4_wrap_cpp
+        # It is required since moc'ed files are now included instead of being added to projects directly
+        # It adds a reverse dependency to solve this
+        # This has the unfortunate side effect that some files are always rebuilt
+        # There is probably a cleaner solution than this
+        macro(fc_wrap_cpp outfiles)
+            # get include dirs
+            QT4_GET_MOC_FLAGS(moc_flags)
+            QT4_EXTRACT_OPTIONS(moc_files moc_options moc_target ${ARGN})
+            # fixes bug 0000585: bug with boost 1.48
+            SET(moc_options ${moc_options} -DBOOST_TT_HAS_OPERATOR_HPP_INCLUDED)
 
-    # This is a special version of the built in macro qt4_wrap_cpp
-    # It is required since moc'ed files are now included instead of being added to projects directly
-    # It adds a reverse dependency to solve this
-    # This has the unfortunate side effect that some files are always rebuilt
-    # There is probably a cleaner solution than this
-    macro(fc_wrap_cpp outfiles )
-        # get include dirs
-        QT4_GET_MOC_FLAGS(moc_flags)
-        QT4_EXTRACT_OPTIONS(moc_files moc_options moc_target ${ARGN})
-        # fixes bug 0000585: bug with boost 1.48
-        SET(moc_options ${moc_options} -DBOOST_TT_HAS_OPERATOR_HPP_INCLUDED)
+            foreach(it ${moc_files})
+                get_filename_component(it ${it} ABSOLUTE)
+                QT4_MAKE_OUTPUT_FILE(${it} moc_ cpp outfile)
+                ADD_CUSTOM_COMMAND(OUTPUT ${outfile}
+                    COMMAND ${QT_MOC_EXECUTABLE}
+                    ARGS ${moc_options} ${it} -o ${outfile}
+                    MAIN_DEPENDENCY ${it}
+                )
+                set(${outfiles} ${${outfiles}} ${outfile})
+                add_file_dependencies(${it} ${outfile})
+            endforeach(it)
+        endmacro(fc_wrap_cpp)
 
-        foreach(it ${moc_files})
-            get_filename_component(it ${it} ABSOLUTE)
-            QT4_MAKE_OUTPUT_FILE(${it} moc_ cpp outfile)
-            ADD_CUSTOM_COMMAND(OUTPUT ${outfile}
-                COMMAND ${QT_MOC_EXECUTABLE}
-                ARGS ${moc_options} ${it} -o ${outfile}
-                MAIN_DEPENDENCY ${it}
-            )
-            set(${outfiles} ${${outfiles}} ${outfile})
-            add_file_dependencies(${it} ${outfile})
-        endforeach(it)
-    endmacro(fc_wrap_cpp)
+    elseif (BUILD_QT5)
+        find_package(Qt5Network)
+        find_package(Qt5Xml)
+        if(BUILD_GUI)
+            find_package(Qt5Widgets)
+            find_package(Qt5PrintSupport)
+            find_package(Qt5OpenGL)
+            find_package(Qt5Svg)
+            find_package(Qt5UiTools)
+            find_package(Qt5Network)
+            find_package(Qt5Concurrent)
+            if (NOT WIN32)
+            # Disable for Windows for now since building the Qt sources always fails
+            find_package(Qt5WebKitWidgets)
+            endif()
+        endif(BUILD_GUI)
+
+        IF(NOT Qt5Core_FOUND)
+            MESSAGE(FATAL_ERROR "========================\n"
+                                "Qt5 libraries not found.\n"
+                                "========================\n")
+        ENDIF(NOT Qt5Core_FOUND)
+
+        # This is a special version of the built in macro qt5_wrap_cpp
+        # It is required since moc'ed files are now included instead of being added to projects directly
+        # It adds a reverse dependency to solve this
+        # This has the unfortunate side effect that some files are always rebuilt
+        # There is probably a cleaner solution than this
+        macro(fc_wrap_cpp outfiles )
+            # get include dirs
+            qt5_get_moc_flags(moc_flags)
+            set(moc_files ${ARGN})
+            # fixes bug 0000585: bug with boost 1.48
+            set(moc_options ${moc_options} -DBOOST_TT_HAS_OPERATOR_HPP_INCLUDED)
+
+            foreach(it ${moc_files})
+                get_filename_component(it ${it} ABSOLUTE)
+                qt5_make_output_file(${it} moc_ cpp outfile)
+                qt5_create_moc_command(${it} ${outfile} "${moc_flags}" "${moc_options}" "${moc_target}" "${moc_depends}")
+                set(${outfiles} ${${outfiles}} ${outfile})
+                add_file_dependencies(${it} ${outfile})
+            endforeach(it)
+        endmacro(fc_wrap_cpp)
+    endif (NOT BUILD_QT5)
+
 
 #--------------------FreeType-----------------------
 
@@ -742,10 +861,66 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 # -------------------------------- Shiboken/PySide ------------------------
 
+    if(BUILD_QT5)
         # set(PYTHON_SUFFIX -python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})
         SET(PYTHON_SUFFIX -python2.7) # for shiboken
         SET(PYTHON_BASENAME -python2.7) # for PySide
 
+        if(DEFINED MACPORTS_PREFIX)
+            find_package(Shiboken REQUIRED HINTS "${PYTHON_LIBRARY_DIR}/cmake")
+            find_package(PySide REQUIRED HINTS "${PYTHON_LIBRARY_DIR}/cmake")
+        endif(DEFINED MACPORTS_PREFIX)
+
+        find_package(Shiboken2)# REQUIRED
+        if(NOT SHIBOKEN_INCLUDE_DIR)
+            MESSAGE(FATAL_ERROR "====================\n"
+                                "shiboken2 not found.\n"
+                                "====================\n")
+        endif(NOT SHIBOKEN_INCLUDE_DIR)
+
+        find_package(PySide2)# REQUIRED
+        if(NOT PYSIDE_INCLUDE_DIR)
+            MESSAGE(FATAL_ERROR "==================\n"
+                                "PySide2 not found.\n"
+                                "==================\n")
+        endif(NOT PYSIDE_INCLUDE_DIR)
+
+        find_package(PySide2Tools REQUIRED) # PySide2 utilities (pyside2-uic & pyside2-rcc)
+
+        file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/bin/PySide)
+        file(WRITE ${CMAKE_BINARY_DIR}/bin/PySide/__init__.py "# PySide wrapper\n")
+        file(WRITE ${CMAKE_BINARY_DIR}/bin/PySide/QtCore.py "from PySide2.QtCore import *\n\n"
+                                                            "#QCoreApplication.CodecForTr=0\n"
+                                                            "#QCoreApplication.UnicodeUTF8=1\n")
+        file(WRITE ${CMAKE_BINARY_DIR}/bin/PySide/QtGui.py  "from PySide2.QtGui import *\n"
+                                                            "from PySide2.QtWidgets import *\n")
+        file(WRITE ${CMAKE_BINARY_DIR}/bin/PySide/QtSvg.py  "from PySide2.QtSvg import *\n")
+
+	if(APPLE)
+	    INSTALL(
+	        DIRECTORY	
+                    ${CMAKE_BINARY_DIR}/bin/PySide
+		DESTINATION
+                    MacOS
+            )
+	else()
+            INSTALL(
+	        DIRECTORY	
+                    ${CMAKE_BINARY_DIR}/bin/PySide
+                DESTINATION
+                    bin
+            )
+	endif()
+    else()
+        if (PYTHON_VERSION_MAJOR LESS 3)
+            SET(PYTHON_SUFFIX -python2.7)
+            SET(PYTHON_BASENAME -python2.7)
+        else(PYTHON_VERSION_MAJOR LESS 3)
+        # set(PYTHON_SUFFIX -python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})
+        # below are two variables that can be left empty for standard python, but must be set by the user for different python versions such as 3.5
+            SET(PYTHON_SUFFIX "" CACHE STRING "Shiboken cmake file suffix. If left empty, system default python version will be used: <ShibokenConfigPYTHON_SUFFIX.cmake>")
+            SET(PYTHON_BASENAME "" CACHE STRING "Same as PYTHON_SUFFIX but for PySide. if left empty, PYTHON_SUFFIX will be used: <PySideConfigPYTHON_BASENAME.cmake>")
+        endif(PYTHON_VERSION_MAJOR LESS 3)
         if(DEFINED MACPORTS_PREFIX)
             find_package(Shiboken REQUIRED HINTS "${PYTHON_LIBRARY_DIR}/cmake")
             find_package(PySide REQUIRED HINTS "${PYTHON_LIBRARY_DIR}/cmake")
@@ -766,6 +941,7 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
         endif(NOT PYSIDE_INCLUDE_DIR)
 
         find_package(PySideTools REQUIRED) # PySide utilities (pyside-uic & pyside-rcc)
+    endif()
 
 # ------------------------------ Matplotlib ------------------------------
 

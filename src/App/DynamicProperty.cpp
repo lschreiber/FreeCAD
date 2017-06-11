@@ -52,7 +52,11 @@ DynamicProperty::~DynamicProperty()
 void DynamicProperty::getPropertyList(std::vector<Property*> &List) const
 {
     // get the properties of the base class first and insert the dynamic properties afterwards
-    this->pc->PropertyContainer::getPropertyList(List);
+    if (this->pc->isDerivedFrom(App::ExtensionContainer::getClassTypeId()))
+        static_cast<App::ExtensionContainer*>(this->pc)->ExtensionContainer::getPropertyList(List);
+    else
+        this->pc->PropertyContainer::getPropertyList(List);
+    
     for (std::map<std::string,PropData>::const_iterator it = props.begin(); it != props.end(); ++it)
         List.push_back(it->second.property);
 }
@@ -60,7 +64,11 @@ void DynamicProperty::getPropertyList(std::vector<Property*> &List) const
 void DynamicProperty::getPropertyMap(std::map<std::string,Property*> &Map) const
 {
     // get the properties of the base class first and insert the dynamic properties afterwards
-    this->pc->PropertyContainer::getPropertyMap(Map);
+    if (this->pc->isDerivedFrom(App::ExtensionContainer::getClassTypeId()))
+        static_cast<App::ExtensionContainer*>(this->pc)->ExtensionContainer::getPropertyMap(Map);
+    else
+        this->pc->PropertyContainer::getPropertyMap(Map);
+    
     for (std::map<std::string,PropData>::const_iterator it = props.begin(); it != props.end(); ++it)
         Map[it->first] = it->second.property;
 }
@@ -233,7 +241,7 @@ Property* DynamicProperty::addDynamicProperty(const char* type, const char* name
         delete base;
         std::stringstream str;
         str << "'" << type << "' is not a property type";
-        throw Base::Exception(str.str());
+        throw Base::ValueError(str.str());
     }
 
     // get unique name
@@ -323,6 +331,11 @@ std::string DynamicProperty::encodeAttribute(const std::string& str) const
 
 void DynamicProperty::Save (Base::Writer &writer) const 
 {
+    //extenions must be saved first, as they need to be read and initialised before properties (as 
+    //they have their own properties which they need to handle on restore)
+    if(this->pc->isDerivedFrom(App::ExtensionContainer::getClassTypeId()))
+        static_cast<App::ExtensionContainer*>(this->pc)->saveExtensions(writer);
+    
     std::map<std::string,Property*> Map;
     getPropertyMap(Map);
 
@@ -381,6 +394,10 @@ void DynamicProperty::Save (Base::Writer &writer) const
 
 void DynamicProperty::Restore(Base::XMLReader &reader)
 {
+    //first all extensions must be initialised so that they can handle their properties
+    if(this->pc->isDerivedFrom(App::ExtensionContainer::getClassTypeId()))
+        static_cast<App::ExtensionContainer*>(this->pc)->restoreExtensions(reader);
+    
     reader.readElement("Properties");
     int Cnt = reader.getAttributeAsInteger("Count");
 

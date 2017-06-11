@@ -66,6 +66,7 @@ Gui::MenuItem* Workbench::setupMenuBar() const
     *draw << "TechDraw_NewMulti";
     *draw << "TechDraw_ProjGroup";
     *draw << "TechDraw_NewViewSection";
+    *draw << "TechDraw_NewViewDetail";
     *draw << "TechDraw_Annotation";
     *draw << "TechDraw_Symbol";
     *draw << "TechDraw_Spreadsheet";
@@ -77,12 +78,6 @@ Gui::MenuItem* Workbench::setupMenuBar() const
     *draw << "TechDraw_ArchView";
     *draw << "TechDraw_ExportPage";
     *draw << "TechDraw_Image";
-    //*draw << "TechDraw_Open";
-    //*part << "TechDraw_NewA3Landscape";
-    //*part << "TechDraw_OpenBrowserView";
-    //*part << "TechDraw_DraftView";
-    //*draw << "Separator";
-    //*draw << "TechDraw_ProjectShape";
 
     return root;
 }
@@ -101,6 +96,7 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
     *views << "TechDraw_NewMulti";
     *views << "TechDraw_ProjGroup";
     *views << "TechDraw_NewViewSection";
+    *views << "TechDraw_NewViewDetail";
     *views << "TechDraw_Annotation";
     *views << "TechDraw_DraftView";
     *views << "TechDraw_ArchView";
@@ -126,11 +122,12 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
     Gui::ToolBarItem *file = new Gui::ToolBarItem(root);
     file->setCommand("TechDraw File Access");
     *file << "TechDraw_ExportPage";
-    *file << "TechDraw_Symbol";
 
     Gui::ToolBarItem *decor = new Gui::ToolBarItem(root);
     decor->setCommand("TechDraw Decoration");
     *decor << "TechDraw_NewHatch";
+    *decor << "TechDraw_NewGeomHatch";
+    *decor << "TechDraw_Symbol";
     *decor << "TechDraw_Image";
     *decor << "TechDraw_ToggleFrame";
     return root;
@@ -150,6 +147,7 @@ Gui::ToolBarItem* Workbench::setupCommandBars() const
     *views << "TechDraw_NewMulti";
     *views << "TechDraw_ProjGroup";
     *views << "TechDraw_NewViewSection";
+    *views << "TechDraw_NewViewDetail";
     *views << "TechDraw_Annotation";
     *views << "TechDraw_DraftView";
     *views << "TechDraw_Spreadsheet";
@@ -174,11 +172,12 @@ Gui::ToolBarItem* Workbench::setupCommandBars() const
     Gui::ToolBarItem *file = new Gui::ToolBarItem(root);
     file->setCommand("TechDraw File Access");
     *file << "TechDraw_ExportPage";
-    *file << "TechDraw_Symbol";
-
+ 
     Gui::ToolBarItem *decor = new Gui::ToolBarItem(root);
     decor->setCommand("TechDraw Decoration");
     *decor << "TechDraw_NewHatch";
+    *decor << "TechDraw_NewGeomHatch";
+    *decor << "TechDraw_Symbol";
     *decor << "TechDraw_Image";
     *decor << "TechDraw_ToggleFrame";
 

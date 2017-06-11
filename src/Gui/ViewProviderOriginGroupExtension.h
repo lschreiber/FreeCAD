@@ -33,7 +33,7 @@ namespace Gui
 
 class GuiExport ViewProviderOriginGroupExtension : public ViewProviderGeoFeatureGroupExtension
 {
-    EXTENSION_PROPERTY_HEADER(Gui::ViewProviderOriginGroupExtension);
+    EXTENSION_PROPERTY_HEADER_WITH_OVERRIDE(Gui::ViewProviderOriginGroupExtension);
 
 public:
     /// Constructor
@@ -46,6 +46,9 @@ public:
     virtual void extensionAttach(App::DocumentObject *pcObject) override;
     virtual void extensionUpdateData(const App::Property* prop) override;
 
+    virtual void extensionDragObject(App::DocumentObject*) override;
+    virtual void extensionDropObject(App::DocumentObject*) override;
+    
     void updateOriginSize();
 
 protected:

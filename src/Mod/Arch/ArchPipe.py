@@ -1,4 +1,4 @@
-# -*- coding: utf8 -*-
+# -*- coding: utf-8 -*-
 
 #***************************************************************************
 #*                                                                         *
@@ -29,10 +29,19 @@ if FreeCAD.GuiUp:
     from DraftTools import translate
     from PySide.QtCore import QT_TRANSLATE_NOOP
 else:
+    # \cond
     def translate(ctxt,txt):
         return txt
     def QT_TRANSLATE_NOOP(ctxt,txt):
         return txt
+    # \endcond
+    
+## @package ArchPipe
+#  \ingroup ARCH
+#  \brief The Pipe object and tools
+#
+#  This module provides tools to build Pipe and Pipe conector objects.
+#  Pipes are tubular objects extruded along a base line.
 
 __title__ = "Arch Pipe tools"
 __author__ = "Yorik van Havre"
@@ -64,6 +73,7 @@ def makePipe(baseobj=None,diameter=0,length=0,placement=None,name="Pipe"):
         obj.Diameter = p.GetFloat("PipeDiameter",50)
     if placement:
         obj.Placement = placement
+    return obj
 
 
 def makePipeConnector(pipes,radius=0,name="Connector"):
@@ -79,6 +89,7 @@ def makePipeConnector(pipes,radius=0,name="Connector"):
     obj.Radius = radius
     if FreeCAD.GuiUp:
         _ViewProviderPipe(obj.ViewObject)
+    return obj
 
 
 class _CommandPipe:
@@ -106,12 +117,16 @@ class _CommandPipe:
                     if len(obj.Shape.Wires) == 1:
                         FreeCAD.ActiveDocument.openTransaction(translate("Arch","Create Pipe"))
                         FreeCADGui.addModule("Arch")
-                        FreeCADGui.doCommand("Arch.makePipe(FreeCAD.ActiveDocument."+obj.Name+")")
+                        FreeCADGui.doCommand("obj = Arch.makePipe(FreeCAD.ActiveDocument."+obj.Name+")")
+                        FreeCADGui.addModule("Draft")
+                        FreeCADGui.doCommand("Draft.autogroup(obj)")
                         FreeCAD.ActiveDocument.commitTransaction()
         else:
             FreeCAD.ActiveDocument.openTransaction(translate("Arch","Create Pipe"))
             FreeCADGui.addModule("Arch")
-            FreeCADGui.doCommand("Arch.makePipe()")
+            FreeCADGui.doCommand("obj = Arch.makePipe()")
+            FreeCADGui.addModule("Draft")
+            FreeCADGui.doCommand("Draft.autogroup(obj)")
             FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -148,7 +163,9 @@ class _CommandPipeConnector:
         o += "]"
         FreeCAD.ActiveDocument.openTransaction(translate("Arch","Create Connector"))
         FreeCADGui.addModule("Arch")
-        FreeCADGui.doCommand("Arch.makePipeConnector("+o+")")
+        FreeCADGui.doCommand("obj = Arch.makePipeConnector("+o+")")
+        FreeCADGui.addModule("Draft")
+        FreeCADGui.doCommand("Draft.autogroup(obj)")
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -181,13 +198,13 @@ class _ArchPipe(ArchComponent.Component):
             e = w.Edges[0]
             v = e.Vertexes[-1].Point.sub(e.Vertexes[0].Point).normalize()
             v.multiply(obj.OffsetStart.Value)
-            e = Part.Line(e.Vertexes[0].Point.add(v),e.Vertexes[-1].Point).toShape()
+            e = Part.LineSegment(e.Vertexes[0].Point.add(v),e.Vertexes[-1].Point).toShape()
             w = Part.Wire([e]+w.Edges[1:])
         if obj.OffsetEnd.Value:
             e = w.Edges[-1]
             v = e.Vertexes[0].Point.sub(e.Vertexes[-1].Point).normalize()
             v.multiply(obj.OffsetEnd.Value)
-            e = Part.Line(e.Vertexes[-1].Point.add(v),e.Vertexes[0].Point).toShape()
+            e = Part.LineSegment(e.Vertexes[-1].Point.add(v),e.Vertexes[0].Point).toShape()
             w = Part.Wire(w.Edges[:-1]+[e])
         p = self.getProfile(obj)
         if not p:
@@ -228,7 +245,7 @@ class _ArchPipe(ArchComponent.Component):
         else:
             if obj.Length.Value == 0:
                 return
-            w = Part.Wire([Part.Line(FreeCAD.Vector(0,0,0),FreeCAD.Vector(0,0,obj.Length.Value)).toShape()])
+            w = Part.Wire([Part.LineSegment(FreeCAD.Vector(0,0,0),FreeCAD.Vector(0,0,obj.Length.Value)).toShape()])
         return w
 
     def getProfile(self,obj):
@@ -241,10 +258,10 @@ class _ArchPipe(ArchComponent.Component):
             if len(obj.Profile.Shape.Wires) != 1:
                 FreeCAD.Console.PrintError(translate("Arch","Too many wires in the profile\n"))
                 return
-            if not obj.Base.Profile.Wires[0].isClosed():
+            if not obj.Profile.Shape.Wires[0].isClosed():
                 FreeCAD.Console.PrintError(translate("Arch","The profile is not closed\n"))
                 return
-            p = obj.Base.Profile.Wires[0]
+            p = obj.Profile.Shape.Wires[0]
         else:
             if obj.Diameter.Value == 0:
                 return

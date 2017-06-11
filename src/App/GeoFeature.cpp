@@ -27,6 +27,7 @@
 #endif
 
 #include "GeoFeature.h"
+#include <App/GeoFeaturePy.h>
 
 using namespace App;
 
@@ -52,4 +53,18 @@ void GeoFeature::transformPlacement(const Base::Placement &transform)
     Base::Placement plm = this->Placement.getValue();
     plm = transform * plm;
     this->Placement.setValue(plm);
+}
+
+const PropertyComplexGeoData* GeoFeature::getPropertyOfGeometry() const
+{
+    return nullptr;
+}
+
+PyObject* GeoFeature::getPyObject(void)
+{
+    if (PythonObject.is(Py::_None())) {
+        // ref counter is set to 1
+        PythonObject = Py::Object(new GeoFeaturePy(this),true);
+    }
+    return Py::new_reference_to(PythonObject);
 }

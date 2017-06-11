@@ -29,6 +29,8 @@
 #include "PropertyPythonObject.h"
 #include "DynamicProperty.h"
 #include <CXX/Objects.hxx>
+#include <Base/Writer.h>
+#include <Base/Reader.h>
 
 namespace App {
     
@@ -100,10 +102,10 @@ namespace App {
  *     registerExtension("App::SecondExtensionPython", self)
  * @endcode
  * 
- * Extensions can provide methods that should be overriden by the extended object for customisation
+ * Extensions can provide methods that should be overridden by the extended object for customisation
  * of the extension behaviour. In c++ this is as simple as overriding the provided virtual functions.
  * In python a class method must be provided which has the same name as the method to override. This 
- * method must not neccessarily be in the object that is extended, it must be in the object which is 
+ * method must not necessarily be in the object that is extended, it must be in the object which is 
  * provided to the "registerExtension" call as second argument. This second argument is used as a 
  * proxy and enqueired if the method to override exists in this proxy before calling it. 
  * 
@@ -112,7 +114,7 @@ namespace App {
 class AppExport ExtensionContainer : public App::PropertyContainer
 {
 
-    TYPESYSTEM_HEADER();
+    TYPESYSTEM_HEADER_WITH_OVERRIDE();
 
 public:
     
@@ -123,9 +125,10 @@ public:
 
     void registerExtension(Base::Type extension, App::Extension* ext);
     bool hasExtension(Base::Type) const; //returns first of type (or derived from) and throws otherwise
-    bool hasExtension(const char* name) const; //this version does not check derived classes
+    bool hasExtension(const std::string& name) const; //this version does not check derived classes
+    bool hasExtensions() const;
     App::Extension* getExtension(Base::Type);  //returns first of type (or derived from) and throws otherwise
-    App::Extension* getExtension(const char* name); //this version does not check derived classes
+    App::Extension* getExtension(const std::string& name); //this version does not check derived classes
     
     //returns first of type (or derived from) and throws otherwise
     template<typename ExtensionT>
@@ -174,7 +177,15 @@ public:
     virtual const char* getPropertyDocumentation(const char *name) const override;
     //@}
     
-    virtual void onChanged(const Property*);
+    virtual void onChanged(const Property*) override;
+    
+    virtual void Save(Base::Writer& writer) const override;
+    virtual void Restore(Base::XMLReader& reader) override;
+    
+    //those methods save/restore the dynamic extenions without handling properties, which is something
+    //done by the default Save/Restore methods.
+    void saveExtensions(Base::Writer& writer) const;
+    void restoreExtensions(Base::XMLReader& reader);
     
 private:
     //stored extensions
@@ -186,14 +197,10 @@ private:
 
 /// We make sur that the PropertyData of the container is not connected to the one of the extension
 #define PROPERTY_SOURCE_WITH_EXTENSIONS(_class_, _parentclass_) \
-TYPESYSTEM_SOURCE_P(_class_);\
-const App::PropertyData * _class_::getPropertyDataPtr(void){return &propertyData;} \
-const App::PropertyData & _class_::getPropertyData(void) const{return propertyData;} \
-App::PropertyData _class_::propertyData; \
-void _class_::init(void){\
-  initSubclass(_class_::classTypeId, #_class_ , #_parentclass_, &(_class_::create) ); \
-  _class_::propertyData.parentPropertyData = _parentclass_::getPropertyDataPtr();\
-}
+    PROPERTY_SOURCE(_class_, _parentclass_)
+
+#define PROPERTY_SOURCE_ABSTRACT_WITH_EXTENSIONS(_class_, _parentclass_) \
+    PROPERTY_SOURCE_ABSTRACT(_class_, _parentclass_)
 
 } //App
 

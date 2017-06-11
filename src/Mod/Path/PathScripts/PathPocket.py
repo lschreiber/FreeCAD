@@ -26,6 +26,7 @@ import FreeCAD
 import Path
 from PySide import QtCore, QtGui
 from PathScripts import PathUtils
+import PathScripts.PathLog as PathLog
 
 FreeCADGui = None
 if FreeCAD.GuiUp:
@@ -33,69 +34,60 @@ if FreeCAD.GuiUp:
 
 """Path Pocket object and FreeCAD command"""
 
+LOG_MODULE = 'PathPocket'
+PathLog.setLevel(PathLog.Level.INFO, LOG_MODULE)
+# PathLog.trackModule('PathPocket')
+
 # Qt tanslation handling
-try:
-    _encoding = QtGui.QApplication.UnicodeUTF8
-
-    def translate(context, text, disambig=None):
-        return QtGui.QApplication.translate(context, text, disambig, _encoding)
-except AttributeError:
-    def translate(context, text, disambig=None):
-        return QtGui.QApplication.translate(context, text, disambig)
-
+def translate(context, text, disambig=None):
+    return QtCore.QCoreApplication.translate(context, text, disambig)
 
 class ObjectPocket:
 
     def __init__(self, obj):
-        obj.addProperty("App::PropertyLinkSubList", "Base", "Path", QtCore.QT_TRANSLATE_NOOP("App::Property","The base geometry of this object"))
-        obj.addProperty("App::PropertyBool", "Active", "Path", QtCore.QT_TRANSLATE_NOOP("App::Property","Make False, to prevent operation from generating code"))
-        obj.addProperty("App::PropertyString", "Comment", "Path", QtCore.QT_TRANSLATE_NOOP("App::Property","An optional comment for this profile"))
-        obj.addProperty("App::PropertyString", "UserLabel", "Path", QtCore.QT_TRANSLATE_NOOP("App::Property","User Assigned Label"))
+        obj.addProperty("App::PropertyLinkSubList", "Base", "Path", QtCore.QT_TRANSLATE_NOOP("App::Property", "The base geometry of this object"))
+        obj.addProperty("App::PropertyBool", "Active", "Path", QtCore.QT_TRANSLATE_NOOP("App::Property", "Make False, to prevent operation from generating code"))
+        obj.addProperty("App::PropertyString", "Comment", "Path", QtCore.QT_TRANSLATE_NOOP("App::Property", "An optional comment for this profile"))
+        obj.addProperty("App::PropertyString", "UserLabel", "Path", QtCore.QT_TRANSLATE_NOOP("App::Property", "User Assigned Label"))
 
-        obj.addProperty("App::PropertyEnumeration", "Algorithm", "Algorithm", QtCore.QT_TRANSLATE_NOOP("App::Property","The library to use to generate the path"))
+        obj.addProperty("App::PropertyEnumeration", "Algorithm", "Algorithm", QtCore.QT_TRANSLATE_NOOP("App::Property", "The library to use to generate the path"))
         obj.Algorithm = ['OCC Native', 'libarea']
 
         # Tool Properties
-        obj.addProperty("App::PropertyIntegerConstraint", "ToolNumber", "Tool", QtCore.QT_TRANSLATE_NOOP("App::Property","The tool number in use"))
-        obj.ToolNumber = (0, 0, 1000, 0)
-        obj.setEditorMode('ToolNumber', 1)  # make this read only
-        obj.addProperty("App::PropertyString", "ToolDescription", "Tool", QtCore.QT_TRANSLATE_NOOP("App::Property","The description of the tool "))
-        obj.setEditorMode('ToolDescription', 1)  # make this read only
+        obj.addProperty("App::PropertyLink", "ToolController", "Path", QtCore.QT_TRANSLATE_NOOP("App::Property", "The tool controller that will be used to calculate the path"))
 
         # Depth Properties
-        obj.addProperty("App::PropertyDistance", "ClearanceHeight", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property","The height needed to clear clamps and obstructions"))
-        obj.addProperty("App::PropertyDistance", "SafeHeight", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property","Rapid Safety Height between locations."))
-        obj.addProperty("App::PropertyFloatConstraint", "StepDown", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property","Incremental Step Down of Tool"))
-        obj.StepDown = (0.0, 0.01, 100.0, 0.5)
-        obj.addProperty("App::PropertyDistance", "StartDepth", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property","Starting Depth of Tool- first cut depth in Z"))
-        obj.addProperty("App::PropertyDistance", "FinalDepth", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property","Final Depth of Tool- lowest value in Z"))
-        obj.addProperty("App::PropertyDistance", "FinishDepth", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property","Maximum material removed on final pass."))
+        obj.addProperty("App::PropertyDistance", "ClearanceHeight", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property", "The height needed to clear clamps and obstructions"))
+        obj.addProperty("App::PropertyDistance", "SafeHeight", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property", "Rapid Safety Height between locations."))
+        obj.addProperty("App::PropertyDistance", "StepDown", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property", "Incremental Step Down of Tool"))
+        obj.addProperty("App::PropertyDistance", "StartDepth", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property", "Starting Depth of Tool- first cut depth in Z"))
+        obj.addProperty("App::PropertyDistance", "FinalDepth", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property", "Final Depth of Tool- lowest value in Z"))
+        obj.addProperty("App::PropertyDistance", "FinishDepth", "Depth", QtCore.QT_TRANSLATE_NOOP("App::Property", "Maximum material removed on final pass."))
 
         # Pocket Properties
-        obj.addProperty("App::PropertyEnumeration", "CutMode", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property","The direction that the toolpath should go around the part ClockWise CW or CounterClockWise CCW"))
+        obj.addProperty("App::PropertyEnumeration", "CutMode", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property", "The direction that the toolpath should go around the part ClockWise CW or CounterClockWise CCW"))
         obj.CutMode = ['Climb', 'Conventional']
-        obj.addProperty("App::PropertyDistance", "MaterialAllowance", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property","Amount of material to leave"))
-        obj.addProperty("App::PropertyEnumeration", "StartAt", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property","Start pocketing at center or boundary"))
+        obj.addProperty("App::PropertyDistance", "MaterialAllowance", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property", "Amount of material to leave"))
+        obj.addProperty("App::PropertyEnumeration", "StartAt", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property", "Start pocketing at center or boundary"))
         obj.StartAt = ['Center', 'Edge']
-        obj.addProperty("App::PropertyPercent", "StepOver", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property","Percent of cutter diameter to step over on each pass"))
-        # obj.StepOver = (0.0, 0.01, 100.0, 0.5)
-        obj.addProperty("App::PropertyBool", "KeepToolDown", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property","Attempts to avoid unnecessary retractions."))
-        obj.addProperty("App::PropertyBool", "ZigUnidirectional", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property","Lifts tool at the end of each pass to respect cut mode."))
-        obj.addProperty("App::PropertyBool", "UseZigZag", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property","Use Zig Zag pattern to clear area."))
-        obj.addProperty("App::PropertyFloat", "ZigZagAngle", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property","Angle of the zigzag pattern"))
+        obj.addProperty("App::PropertyPercent", "StepOver", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property", "Percent of cutter diameter to step over on each pass"))
+        obj.addProperty("App::PropertyBool", "KeepToolDown", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property", "Attempts to avoid unnecessary retractions."))
+        obj.addProperty("App::PropertyBool", "ZigUnidirectional", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property", "Lifts tool at the end of each pass to respect cut mode."))
+        obj.addProperty("App::PropertyBool", "UseZigZag", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property", "Use Zig Zag pattern to clear area."))
+        obj.addProperty("App::PropertyFloat", "ZigZagAngle", "Pocket", QtCore.QT_TRANSLATE_NOOP("App::Property", "Angle of the zigzag pattern"))
 
         # Entry Properties
-        obj.addProperty("App::PropertyBool", "UseEntry", "Entry", QtCore.QT_TRANSLATE_NOOP("App::Property","Allow Cutter enter material with a straight plunge."))
-        obj.addProperty("App::PropertyFloatConstraint", "RampSize", "Entry", QtCore.QT_TRANSLATE_NOOP("App::Property","The minimum fraction of tool diameter to use for ramp length"))
+        obj.addProperty("App::PropertyBool", "UseEntry", "Entry", QtCore.QT_TRANSLATE_NOOP("App::Property", "Allow Cutter enter material with a straight plunge."))
+        obj.addProperty("App::PropertyFloatConstraint", "RampSize", "Entry", QtCore.QT_TRANSLATE_NOOP("App::Property", "The minimum fraction of tool diameter to use for ramp length"))
         obj.RampSize = (0.0, 0.01, 100.0, 0.5)
-        obj.addProperty("App::PropertyFloatConstraint", "HelixSize", "Entry", QtCore.QT_TRANSLATE_NOOP("App::Property","The fraction of tool diameter to use for calculating helix size."))
+        obj.addProperty("App::PropertyFloatConstraint", "HelixSize", "Entry", QtCore.QT_TRANSLATE_NOOP("App::Property", "The fraction of tool diameter to use for calculating helix size."))
         obj.HelixSize = (0.0, 0.01, 100.0, 0.5)
-        obj.addProperty("App::PropertyFloatConstraint", "RampAngle", "Entry", QtCore.QT_TRANSLATE_NOOP("App::Property","The Angle of the ramp entry."))
+        obj.addProperty("App::PropertyFloatConstraint", "RampAngle", "Entry", QtCore.QT_TRANSLATE_NOOP("App::Property", "The Angle of the ramp entry."))
         obj.RampAngle = (0.0, 0.01, 100.0, 0.5)
 
         # Start Point Properties
-        obj.addProperty("App::PropertyVector", "StartPoint", "Start Point", QtCore.QT_TRANSLATE_NOOP("App::Property","The start point of this path"))
-        obj.addProperty("App::PropertyBool", "UseStartPoint", "Start Point", QtCore.QT_TRANSLATE_NOOP("App::Property","make True, if specifying a Start Point"))
+        obj.addProperty("App::PropertyVector", "StartPoint", "Start Point", QtCore.QT_TRANSLATE_NOOP("App::Property", "The start point of this path"))
+        obj.addProperty("App::PropertyBool", "UseStartPoint", "Start Point", QtCore.QT_TRANSLATE_NOOP("App::Property", "make True, if specifying a Start Point"))
 
         obj.Proxy = self
 
@@ -109,9 +101,6 @@ class ObjectPocket:
                 obj.setEditorMode('HelixSize', 2)  # make this hidden
                 obj.setEditorMode('RampAngle', 2)  # make this hidden
                 obj.setEditorMode('RampSize', 2)   # make this hidden
-
-        if prop == "UserLabel":
-            obj.Label = obj.UserLabel + " :" + obj.ToolDescription
 
     def __getstate__(self):
         return None
@@ -154,7 +143,7 @@ class ObjectPocket:
         else:
             baselist.append(item)
         obj.Base = baselist
-        print "this base is: " + str(baselist)
+        print("this base is: " + str(baselist))
         self.execute(obj)
 
     def getStock(self, obj):
@@ -173,8 +162,7 @@ class ObjectPocket:
         """Build the pocket path using libarea algorithm"""
         import PathScripts.PathAreaUtils as PathAreaUtils
         from PathScripts.PathUtils import depth_params
-
-        FreeCAD.Console.PrintMessage(translate("PathPocket", "Generating toolpath with libarea offsets.\n"))
+        PathLog.debug("Generating toolpath with libarea offsets.\n")
 
         depthparams = depth_params(
                 obj.ClearanceHeight.Value,
@@ -223,7 +211,7 @@ class ObjectPocket:
         import DraftGeomUtils
         from PathScripts.PathUtils import fmt, helicalPlunge, rampPlunge, depth_params
 
-        FreeCAD.Console.PrintMessage(translate("PathPocket", "Generating toolpath with OCC native offsets.\n"))
+        PathLog.debug("Generating toolpath with OCC native offsets.\n")
         extraoffset = obj.MaterialAllowance.Value
 
         # Build up the offset loops
@@ -316,7 +304,7 @@ class ObjectPocket:
                             # Otherwise, straight plunge... Don't want to, but sometimes you might not have a choice.
                             # FIXME: At least not with the lazy ramp programming above...
                             else:
-                                print "WARNING: Straight-plunging... probably not good, but we didn't find a place to helix or ramp"
+                                print("WARNING: Straight-plunging... probably not good, but we didn't find a place to helix or ramp")
                                 startPoint = edge.Vertexes[0].Point
                                 output += "G0 Z" + fmt(obj.ClearanceHeight.Value) + "F " + PathUtils.fmt(self.vertRapid) + "\n"
                                 output += "G0 X" + fmt(startPoint.x) + " Y" + fmt(startPoint.y) +\
@@ -338,14 +326,14 @@ class ObjectPocket:
                         else:
                             output += "G3"
                         output += " X" + fmt(point.x) + " Y" + fmt(point.y) + " Z" + fmt(vpos)
-                        output += " I" + fmt(relcenter.x) + " J" + fmt(relcenter.y) + " K" + fmt(relcenter.z)  + " F" + fmt(self.horizFeed) 
+                        output += " I" + fmt(relcenter.x) + " J" + fmt(relcenter.y) + " K" + fmt(relcenter.z) + " F" + fmt(self.horizFeed)
                         output += "\n"
                         last = point
                     else:
                         point = edge.Vertexes[-1].Point
                         if point == last:  # edges can come flipped
                             point = edge.Vertexes[0].Point
-                        output += "G1 X" + fmt(point.x) + " Y" + fmt(point.y) + " Z" + fmt(vpos) + " F" + fmt(self.horizFeed)  + "\n"
+                        output += "G1 X" + fmt(point.x) + " Y" + fmt(point.y) + " Z" + fmt(vpos) + " F" + fmt(self.horizFeed) + "\n"
                         last = point
 
         # move back up
@@ -355,34 +343,21 @@ class ObjectPocket:
     # To reload this from FreeCAD, use: import PathScripts.PathPocket; reload(PathScripts.PathPocket)
     def execute(self, obj):
         output = ""
-        toolLoad = PathUtils.getLastToolLoad(obj)
+
+        toolLoad = obj.ToolController
         if toolLoad is None or toolLoad.ToolNumber == 0:
-            self.vertFeed = 100
-            self.horizFeed = 100
-            self.vertRapid = 100
-            self.horiRrapid = 100
-            self.radius = 0.25
-            obj.ToolNumber = 0
-            obj.ToolDescription = "UNDEFINED"
+            FreeCAD.Console.PrintError("No Tool Controller is selected. We need a tool to build a Path.")
         else:
             self.vertFeed = toolLoad.VertFeed.Value
             self.horizFeed = toolLoad.HorizFeed.Value
             self.vertRapid = toolLoad.VertRapid.Value
             self.horizRapid = toolLoad.HorizRapid.Value
-            tool = PathUtils.getTool(obj, toolLoad.ToolNumber)
-            if tool.Diameter == 0:
-                self.radius = 0.25
+            tool = toolLoad.Proxy.getTool(toolLoad)
+            if not tool or tool.Diameter == 0:
+                FreeCAD.Console.PrintError("No Tool found or diameter is zero. We need a tool to build a Path.")
+                return
             else:
                 self.radius = tool.Diameter/2
-            obj.ToolNumber = toolLoad.ToolNumber
-            obj.ToolDescription = toolLoad.Name
-
-        output += "(" + obj.Label + ")"
-
-        if obj.UserLabel == "":
-            obj.Label = obj.Name + " :" + obj.ToolDescription
-        else:
-            obj.Label = obj.UserLabel + " :" + obj.ToolDescription
 
         if obj.Base:
             for b in obj.Base:
@@ -517,6 +492,7 @@ class CommandPathPocket:
         FreeCADGui.doCommand('obj.RampSize = 0.75')
         FreeCADGui.doCommand('obj.HelixSize = 0.75')
         FreeCADGui.doCommand('PathScripts.PathUtils.addToJob(obj)')
+        FreeCADGui.doCommand('obj.ToolController = PathScripts.PathUtils.findToolController(obj)')
         FreeCAD.ActiveDocument.commitTransaction()
 
         FreeCAD.ActiveDocument.recompute()
@@ -545,17 +521,17 @@ class TaskPanel:
     def getFields(self):
         if self.obj:
             if hasattr(self.obj, "StartDepth"):
-                self.obj.StartDepth = self.form.startDepth.text()
+                self.obj.StartDepth = FreeCAD.Units.Quantity(self.form.startDepth.text()).Value
             if hasattr(self.obj, "FinalDepth"):
-                self.obj.FinalDepth = self.form.finalDepth.text()
+                self.obj.FinalDepth = FreeCAD.Units.Quantity(self.form.finalDepth.text()).Value
             if hasattr(self.obj, "SafeHeight"):
-                self.obj.SafeHeight = self.form.safeHeight.text()
+                self.obj.SafeHeight = FreeCAD.Units.Quantity(self.form.safeHeight.text()).Value
             if hasattr(self.obj, "ClearanceHeight"):
-                self.obj.ClearanceHeight = self.form.clearanceHeight.text()
+                self.obj.ClearanceHeight = FreeCAD.Units.Quantity(self.form.clearanceHeight.text()).Value
             if hasattr(self.obj, "StepDown"):
-                self.obj.StepDown = self.form.stepDown.value()
+                self.obj.StepDown = FreeCAD.Units.Quantity(self.form.stepDown.text()).Value
             if hasattr(self.obj, "MaterialAllowance"):
-                self.obj.MaterialAllowance = self.form.extraOffset.value()
+                self.obj.MaterialAllowance = FreeCAD.Units.Quantity(self.form.extraOffset.text()).Value
             if hasattr(self.obj, "UseStartPoint"):
                 self.obj.UseStartPoint = self.form.useStartPoint.isChecked()
             if hasattr(self.obj, "Algorithm"):
@@ -567,23 +543,27 @@ class TaskPanel:
             if hasattr(self.obj, "ZigUnidirectional"):
                 self.obj.ZigUnidirectional = self.form.zigZagUnidirectional.isChecked()
             if hasattr(self.obj, "ZigZagAngle"):
-                self.obj.ZigZagAngle = self.form.zigZagAngle.value()
+                self.obj.ZigZagAngle = FreeCAD.Units.Quantity(self.form.zigZagAngle.text()).Value
             if hasattr(self.obj, "StepOver"):
                 self.obj.StepOver = self.form.stepOverPercent.value()
+            if hasattr(self.obj, "ToolController"):
+                PathLog.debug("name: {}".format(self.form.uiToolController.currentText()))
+                tc = PathUtils.findToolController(self.obj, self.form.uiToolController.currentText())
+                self.obj.ToolController = tc
 
         self.obj.Proxy.execute(self.obj)
 
     def setFields(self):
-        self.form.startDepth.setText(str(self.obj.StartDepth.Value))
-        self.form.finalDepth.setText(str(self.obj.FinalDepth.Value))
-        self.form.safeHeight.setText(str(self.obj.SafeHeight.Value))
-        self.form.clearanceHeight.setText(str(self.obj.ClearanceHeight.Value))
-        self.form.stepDown.setValue(self.obj.StepDown)
-        self.form.extraOffset.setValue(self.obj.MaterialAllowance.Value)
+        self.form.startDepth.setText(FreeCAD.Units.Quantity(self.obj.StartDepth.Value, FreeCAD.Units.Length).UserString)
+        self.form.finalDepth.setText(FreeCAD.Units.Quantity(self.obj.FinalDepth.Value, FreeCAD.Units.Length).UserString)
+        self.form.safeHeight.setText(FreeCAD.Units.Quantity(self.obj.SafeHeight.Value, FreeCAD.Units.Length).UserString)
+        self.form.clearanceHeight.setText(FreeCAD.Units.Quantity(self.obj.ClearanceHeight.Value,  FreeCAD.Units.Length).UserString)
+        self.form.stepDown.setText(FreeCAD.Units.Quantity(self.obj.StepDown.Value, FreeCAD.Units.Length).UserString)
+        self.form.extraOffset.setText(FreeCAD.Units.Quantity(self.obj.MaterialAllowance, FreeCAD.Units.Length).UserString)
         self.form.useStartPoint.setChecked(self.obj.UseStartPoint)
         self.form.useZigZag.setChecked(self.obj.UseZigZag)
         self.form.zigZagUnidirectional.setChecked(self.obj.ZigUnidirectional)
-        self.form.zigZagAngle.setValue(self.obj.ZigZagAngle)
+        self.form.zigZagAngle.setText(FreeCAD.Units.Quantity(self.obj.ZigZagAngle, FreeCAD.Units.Angle).UserString)
         self.form.stepOverPercent.setValue(self.obj.StepOver)
 
         index = self.form.algorithmSelect.findText(self.obj.Algorithm, QtCore.Qt.MatchFixedString)
@@ -606,6 +586,22 @@ class TaskPanel:
             for sub in i[1]:
                 self.form.baseList.addItem(i[0].Name + "." + sub)
         self.form.baseList.blockSignals(False)
+
+        controllers = PathUtils.getToolControllers(self.obj)
+        labels = [c.Label for c in controllers]
+        self.form.uiToolController.blockSignals(True)
+        self.form.uiToolController.addItems(labels)
+        self.form.uiToolController.blockSignals(False)
+        if self.obj.ToolController is not None:
+            index = self.form.uiToolController.findText(
+                self.obj.ToolController.Label, QtCore.Qt.MatchFixedString)
+            PathLog.debug("searching for TC label {}. Found Index: {}".format(self.obj.ToolController.Label, index))
+            if index >= 0:
+                self.form.uiToolController.blockSignals(True)
+                self.form.uiToolController.setCurrentIndex(index)
+                self.form.uiToolController.blockSignals(False)
+        else:
+            self.obj.ToolController = PathUtils.findToolController(self.obj)
 
     def open(self):
         self.s = SelObserver()
@@ -693,6 +689,7 @@ class TaskPanel:
         self.form.addBase.clicked.connect(self.addBase)
         self.form.deleteBase.clicked.connect(self.deleteBase)
         self.form.reorderBase.clicked.connect(self.reorderBase)
+        self.form.uiToolController.currentIndexChanged.connect(self.getFields)
 
         # Depths
         self.form.startDepth.editingFinished.connect(self.getFields)

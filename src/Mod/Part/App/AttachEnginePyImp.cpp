@@ -6,7 +6,7 @@
 #include "Mod/Part/App/Attacher.h"
 #include <Base/PlacementPy.h>
 #include <App/DocumentObjectPy.h>
-#include "AttachableObjectPy.h"
+#include "AttachExtensionPy.h"
 #include "TopoShapePy.h"
 
 #include "OCCError.h"
@@ -84,7 +84,7 @@ Py::String AttachEnginePy::getAttacherType(void) const
   */
 #define ATTACHERPY_STDCATCH_ATTR \
     catch (Standard_Failure) {\
-        Handle_Standard_Failure e = Standard_Failure::Caught();\
+        Handle(Standard_Failure) e = Standard_Failure::Caught();\
         throw Py::Exception(Part::PartExceptionOCCError, e->GetMessageString());\
     } catch (Base::Exception &e) {\
         throw Py::Exception(Base::BaseExceptionFreeCADError, e.what());\
@@ -225,7 +225,7 @@ Py::List AttachEnginePy::getImplementedModes(void) const
   */
 #define ATTACHERPY_STDCATCH_METH \
     catch (Standard_Failure) {\
-        Handle_Standard_Failure e = Standard_Failure::Caught();\
+        Handle(Standard_Failure) e = Standard_Failure::Caught();\
         PyErr_SetString(Part::PartExceptionOCCError, e->GetMessageString());\
         return NULL;\
     } catch (Base::Exception &e) {\
@@ -257,8 +257,11 @@ PyObject* AttachEnginePy::getModeInfo(PyObject* args)
         }
         Py::Dict ret;
         ret["ReferenceCombinations"] = pyListOfCombinations;
+#if PY_MAJOR_VERSION >= 3
+        ret["ModeIndex"] = Py::Long(mmode);
+#else
         ret["ModeIndex"] = Py::Int(mmode);
-
+#endif
         try {
             Py::Module module(PyImport_ImportModule("PartGui"),true);
             if (!module.hasAttr("AttachEngineResources")) {
@@ -269,7 +272,11 @@ PyObject* AttachEnginePy::getModeInfo(PyObject* args)
             Py::Callable method(submod.getAttr("getModeStrings"));
             Py::Tuple arg(2);
             arg.setItem(0, Py::String(this->getAttachEnginePtr()->getTypeId().getName()));
+#if PY_MAJOR_VERSION >= 3
+            arg.setItem(1, Py::Long(mmode));
+#else
             arg.setItem(1, Py::Int(mmode));
+#endif
             Py::List strs = method.apply(arg);
             assert(strs.size() == 2);
             ret["UserFriendlyName"] = strs[0];
@@ -342,8 +349,13 @@ PyObject* AttachEnginePy::getRefTypeInfo(PyObject* args)
         AttachEngine &attacher = *(this->getAttachEnginePtr());
         eRefType rt = attacher.getRefTypeByName(typeName);
         Py::Dict ret;
+#if PY_MAJOR_VERSION >= 3
+        ret["TypeIndex"] = Py::Long(rt);
+        ret["Rank"] = Py::Long(AttachEngine::getTypeRank(rt));
+#else
         ret["TypeIndex"] = Py::Int(rt);
         ret["Rank"] = Py::Int(AttachEngine::getTypeRank(rt));
+#endif
 
         try {
             Py::Module module(PyImport_ImportModule("PartGui"),true);
@@ -354,7 +366,11 @@ PyObject* AttachEnginePy::getRefTypeInfo(PyObject* args)
             Py::Object submod(module.getAttr("AttachEngineResources"));
             Py::Callable method(submod.getAttr("getRefTypeUserFriendlyName"));
             Py::Tuple arg(1);
+#if PY_MAJOR_VERSION >= 3
+            arg.setItem(0, Py::Long(rt));
+#else
             arg.setItem(0, Py::Int(rt));
+#endif
             Py::String st = method.apply(arg);
             ret["UserFriendlyName"] = st;
         } catch (Py::Exception& e) {
@@ -493,12 +509,12 @@ PyObject* AttachEnginePy::readParametersFromFeature(PyObject* args)
         return NULL;    // NULL triggers exception
 
     try{
-        const App::DocumentObjectPy* dobjpy = static_cast<const App::DocumentObjectPy*>(obj);
-        const App::DocumentObject* dobj = dobjpy->getDocumentObjectPtr();
-        if (! dobj->isDerivedFrom(Part::AttachableObject::getClassTypeId())){
-            throw Py::TypeError("Supplied object isn't Part::AttachableObject");
+        App::DocumentObjectPy* dobjpy = static_cast<App::DocumentObjectPy*>(obj);
+        App::DocumentObject* dobj = dobjpy->getDocumentObjectPtr();
+        if (! dobj->hasExtension(Part::AttachExtension::getExtensionClassTypeId())){
+            throw Py::TypeError("Supplied object has no Part::AttachExtension");
         }
-        const Part::AttachableObject* feat = static_cast<const Part::AttachableObject*>(dobj);
+        Part::AttachExtension* feat = dobj->getExtensionByType<Part::AttachExtension>();
         AttachEngine &attacher = *(this->getAttachEnginePtr());
         attacher.setUp(feat->Support,
                        eMapMode(feat->MapMode.getValue()),
@@ -519,10 +535,10 @@ PyObject* AttachEnginePy::writeParametersToFeature(PyObject* args)
     try{
         App::DocumentObjectPy* dobjpy = static_cast<App::DocumentObjectPy*>(obj);
         App::DocumentObject* dobj = dobjpy->getDocumentObjectPtr();
-        if (! dobj->isDerivedFrom(Part::AttachableObject::getClassTypeId())){
-            throw Py::TypeError("Supplied object isn't Part::AttachableObject");
+        if (! dobj->hasExtension(Part::AttachExtension::getExtensionClassTypeId())){
+            throw Py::TypeError("Supplied object has no Part::AttachExtension");
         }
-        Part::AttachableObject* feat = static_cast<Part::AttachableObject*>(dobj);
+        Part::AttachExtension* feat = dobj->getExtensionByType<Part::AttachExtension>();
         const AttachEngine &attacher = *(this->getAttachEnginePtr());
         AttachEngine::verifyReferencesAreSafe(attacher.references);
         feat->Support.Paste(attacher.references);

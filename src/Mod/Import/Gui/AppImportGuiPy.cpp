@@ -52,9 +52,11 @@
 # include <IGESControl_Controller.hxx>
 # include <IGESData_GlobalSection.hxx>
 # include <IGESData_IGESModel.hxx>
+# include <IGESToBRep_Actor.hxx>
 # include <Interface_Static.hxx>
 # include <Transfer_TransientProcess.hxx>
 # include <XSControl_WorkSession.hxx>
+# include <XSControl_TransferReader.hxx>
 # include <TopTools_IndexedMapOfShape.hxx>
 # include <TopTools_MapOfShape.hxx>
 # include <TopExp_Explorer.hxx>
@@ -112,10 +114,14 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
+#include <Gui/Application.h>
+#include <Gui/Document.h>
+#include <Gui/ViewProvider.h>
+
 class OCAFBrowser
 {
 public:
-    OCAFBrowser(Handle_TDocStd_Document h)
+    OCAFBrowser(Handle(TDocStd_Document) h)
         : pDoc(h)
     {
         myGroupIcon = QApplication::style()->standardIcon(QStyle::SP_DirIcon);
@@ -150,7 +156,7 @@ private:
 private:
     QIcon myGroupIcon;
     TDF_IDList myList;
-    Handle_TDocStd_Document pDoc;
+    Handle(TDocStd_Document) pDoc;
 };
 
 void OCAFBrowser::load(QTreeWidget* theTree)
@@ -182,25 +188,25 @@ void OCAFBrowser::load(const TDF_Label& label, QTreeWidgetItem* item, const QStr
                 QString text;
                 QTextStream str(&text);
                 str << attr->DynamicType()->Name();
-                str << " = " << toString(Handle_TDataStd_Name::DownCast(attr)->Get()).c_str();
+                str << " = " << toString(Handle(TDataStd_Name)::DownCast(attr)->Get()).c_str();
                 child->setText(0, text);
             }
             else if (it.Value() == TDF_TagSource::GetID()) {
                 QString text;
                 QTextStream str(&text);
                 str << attr->DynamicType()->Name();
-                str << " = " << Handle_TDF_TagSource::DownCast(attr)->Get();
+                str << " = " << Handle(TDF_TagSource)::DownCast(attr)->Get();
                 child->setText(0, text);
             }
             else if (it.Value() == TDataStd_Integer::GetID()) {
                 QString text;
                 QTextStream str(&text);
                 str << attr->DynamicType()->Name();
-                str << " = " << Handle_TDataStd_Integer::DownCast(attr)->Get();
+                str << " = " << Handle(TDataStd_Integer)::DownCast(attr)->Get();
                 child->setText(0, text);
             }
             else if (it.Value() == TNaming_NamedShape::GetID()) {
-                TopoDS_Shape shape = Handle_TNaming_NamedShape::DownCast(attr)->Get();
+                TopoDS_Shape shape = Handle(TNaming_NamedShape)::DownCast(attr)->Get();
                 QString text;
                 QTextStream str(&text);
                 str << attr->DynamicType()->Name() << " = ";
@@ -267,7 +273,7 @@ void OCAFBrowser::load(const TDF_Label& label, QTreeWidgetItem* item, const QStr
 class ImportOCAFExt : public Import::ImportOCAF
 {
 public:
-    ImportOCAFExt(Handle_TDocStd_Document h, App::Document* d, const std::string& name)
+    ImportOCAFExt(Handle(TDocStd_Document) h, App::Document* d, const std::string& name)
         : ImportOCAF(h, d, name)
     {
     }
@@ -348,7 +354,7 @@ private:
                         throw Py::Exception(PyExc_IOError, "cannot read STEP file");
                     }
 
-                    Handle_Message_ProgressIndicator pi = new Part::ProgressIndicator(100);
+                    Handle(Message_ProgressIndicator) pi = new Part::ProgressIndicator(100);
                     aReader.Reader().WS()->MapReader()->SetProgress(pi);
                     pi->NewScope(100, "Reading STEP file...");
                     pi->Show();
@@ -356,7 +362,7 @@ private:
                     pi->EndScope();
                 }
                 catch (OSD_Exception) {
-                    Handle_Standard_Failure e = Standard_Failure::Caught();
+                    Handle(Standard_Failure) e = Standard_Failure::Caught();
                     Base::Console().Error("%s\n", e->GetMessageString());
                     Base::Console().Message("Try to load STEP file without colors...\n");
 
@@ -381,15 +387,18 @@ private:
                         throw Py::Exception(Base::BaseExceptionFreeCADError, "cannot read IGES file");
                     }
 
-                    Handle_Message_ProgressIndicator pi = new Part::ProgressIndicator(100);
+                    Handle(Message_ProgressIndicator) pi = new Part::ProgressIndicator(100);
                     aReader.WS()->MapReader()->SetProgress(pi);
                     pi->NewScope(100, "Reading IGES file...");
                     pi->Show();
                     aReader.Transfer(hDoc);
                     pi->EndScope();
+                    // http://opencascade.blogspot.de/2009/03/unnoticeable-memory-leaks-part-2.html
+                    Handle(IGESToBRep_Actor)::DownCast(aReader.WS()->TransferReader()->Actor())
+                            ->SetModel(new IGESData_IGESModel);
                 }
                 catch (OSD_Exception) {
-                    Handle_Standard_Failure e = Standard_Failure::Caught();
+                    Handle(Standard_Failure) e = Standard_Failure::Caught();
                     Base::Console().Error("%s\n", e->GetMessageString());
                     Base::Console().Message("Try to load IGES file without colors...\n");
 
@@ -402,11 +411,18 @@ private:
             }
 
             ImportOCAFExt ocaf(hDoc, pcDoc, file.fileNamePure());
-            ocaf.loadShapes();
+            // We must recompute the doc before loading shapes as they are going to be
+            // inserted into the document and computed at the same time so we are going to
+            // purge the document before recomputing it to clear it and settle it in the proper
+            // way. This is drastically improving STEP rendering time on complex STEP files.
             pcDoc->recompute();
+            ocaf.loadShapes();
+            pcDoc->purgeTouched();
+            pcDoc->recompute();
+            hApp->Close(hDoc);
         }
         catch (Standard_Failure) {
-            Handle_Standard_Failure e = Standard_Failure::Caught();
+            Handle(Standard_Failure) e = Standard_Failure::Caught();
             throw Py::Exception(Base::BaseExceptionFreeCADError, e->GetMessageString());
         }
         catch (const Base::Exception& e) {
@@ -427,12 +443,14 @@ private:
         std::string name8bit = Part::encodeFilename(Utf8Name);
 
         try {
+            Py::Sequence list(object);
             Handle(XCAFApp_Application) hApp = XCAFApp_Application::GetApplication();
             Handle(TDocStd_Document) hDoc;
             hApp->NewDocument(TCollection_ExtendedString("MDTV-CAF"), hDoc);
-            Import::ExportOCAF ocaf(hDoc);
 
-            Py::Sequence list(object);
+            bool keepExplicitPlacement = list.size() > 1;
+            Import::ExportOCAF ocaf(hDoc, keepExplicitPlacement);
+
             for (Py::Sequence::iterator it = list.begin(); it != list.end(); ++it) {
                 PyObject* item = (*it).ptr();
                 if (PyObject_TypeCheck(item, &(App::DocumentObjectPy::Type))) {
@@ -495,9 +513,11 @@ private:
                     throw Py::Exception();
                 }
             }
+
+            hApp->Close(hDoc);
         }
         catch (Standard_Failure) {
-            Handle_Standard_Failure e = Standard_Failure::Caught();
+            Handle(Standard_Failure) e = Standard_Failure::Caught();
             throw Py::Exception(Base::BaseExceptionFreeCADError, e->GetMessageString());
         }
         catch (const Base::Exception& e) {
@@ -528,7 +548,7 @@ private:
                     throw Py::Exception(PyExc_IOError, "cannot read STEP file");
                 }
 
-                Handle_Message_ProgressIndicator pi = new Part::ProgressIndicator(100);
+                Handle(Message_ProgressIndicator) pi = new Part::ProgressIndicator(100);
                 aReader.Reader().WS()->MapReader()->SetProgress(pi);
                 pi->NewScope(100, "Reading STEP file...");
                 pi->Show();
@@ -550,12 +570,15 @@ private:
                     throw Py::Exception(PyExc_IOError, "cannot read IGES file");
                 }
 
-                Handle_Message_ProgressIndicator pi = new Part::ProgressIndicator(100);
+                Handle(Message_ProgressIndicator) pi = new Part::ProgressIndicator(100);
                 aReader.WS()->MapReader()->SetProgress(pi);
                 pi->NewScope(100, "Reading IGES file...");
                 pi->Show();
                 aReader.Transfer(hDoc);
                 pi->EndScope();
+                // http://opencascade.blogspot.de/2009/03/unnoticeable-memory-leaks-part-2.html
+                Handle(IGESToBRep_Actor)::DownCast(aReader.WS()->TransferReader()->Actor())
+                        ->SetModel(new IGESData_IGESModel);
             }
             else {
                 throw Py::Exception(Base::BaseExceptionFreeCADError, "no supported file format");
@@ -585,9 +608,10 @@ private:
 
             OCAFBrowser browse(hDoc);
             browse.load(dlg->findChild<QTreeWidget*>());
+            hApp->Close(hDoc);
         }
         catch (Standard_Failure) {
-            Handle_Standard_Failure e = Standard_Failure::Caught();
+            Handle(Standard_Failure) e = Standard_Failure::Caught();
             throw Py::Exception(Base::BaseExceptionFreeCADError, e->GetMessageString());
         }
         catch (const Base::Exception& e) {

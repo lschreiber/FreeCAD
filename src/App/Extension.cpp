@@ -33,8 +33,9 @@
 #include "Base/Exception.h"
 #include <Base/Console.h>
 #include <Base/PyObjectBase.h>
+#include <ExtensionPy.h>
  
-/* We do not use a standart property macro for type initiation. The reason is that we have the first
+/* We do not use a standard property macro for type initiation. The reason is that we have the first
  * PropertyData in the extension chain, there is no parent property data. 
  */
 EXTENSION_TYPESYSTEM_SOURCE_P(App::Extension);
@@ -70,20 +71,20 @@ Extension::~Extension()
     }
 }
 
-void Extension::initExtension(Base::Type type) {
+void Extension::initExtensionType(Base::Type type) {
 
     m_extensionType = type;
     if(m_extensionType.isBad())
-        throw Base::Exception("Extension: Extension type not set");
+        throw Base::RuntimeError("Extension: Extension type not set");
 }
 
 void Extension::initExtension(ExtensionContainer* obj) {
 
     if(m_extensionType.isBad())
-        throw Base::Exception("Extension: Extension type not set");
+        throw Base::RuntimeError("Extension: Extension type not set");
  
     //all properties are initialised without PropertyContainer father. Now that we know it we can
-    //finaly finsih the property initialisation
+    //finally finish the property initialisation
     std::vector<Property*> list;
     extensionGetPropertyData().getPropertyList(this, list);
     for(Property* prop : list)
@@ -96,21 +97,26 @@ void Extension::initExtension(ExtensionContainer* obj) {
 
 PyObject* Extension::getExtensionPyObject(void) {
 
-    return nullptr;
+    if (ExtensionPythonObject.is(Py::_None())){
+        // ref counter is set to 1
+        auto grp = new ExtensionPy(this);
+        ExtensionPythonObject = Py::Object(grp,true);
+    }
+    return Py::new_reference_to(ExtensionPythonObject);
 }
 
-const char* Extension::name() {
+std::string Extension::name() const {
     
     if(m_extensionType.isBad())
-        throw Base::Exception("Extension::setExtendedObject: Extension type not set");
+        throw Base::RuntimeError("Extension::name: Extension type not set");
     
     std::string temp(m_extensionType.getName());
     std::string::size_type pos = temp.find_last_of(":");
 
     if(pos != std::string::npos)
-        return temp.substr(pos+1).c_str();
+        return temp.substr(pos+1);
     else
-        return std::string().c_str();
+        return std::string();
 }
 
 

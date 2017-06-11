@@ -66,7 +66,7 @@ protected:
     void blockButtons(bool b);
     void changeEvent(QEvent *e);
     void resetValues();
-    void calcValues();
+    bool calcValues();
     void saveInitialValues();
     void updateValues();
     QString formatVector(Base::Vector3d v);
@@ -83,8 +83,8 @@ private:
 
     std::string saveSym;
     std::string saveLabel;
-    bool saveHorizSectionLine;
-    bool saveArrowUpSection;
+  //bool saveHorizSectionLine;
+  //bool saveArrowUpSection;
     Base::Vector3d saveSectionProjDir;
     Base::Vector3d saveSectionOrigin;
     Base::Vector3d saveSectionNormal;

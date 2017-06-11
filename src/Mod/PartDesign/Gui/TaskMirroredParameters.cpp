@@ -169,7 +169,7 @@ void TaskMirroredParameters::updateUI()
     PartDesign::Mirrored* pcMirrored = static_cast<PartDesign::Mirrored*>(getObject());
 
     if (planeLinks.setCurrentLink(pcMirrored->MirrorPlane) == -1){
-        //failed to set current, because the link isnt in the list yet
+        //failed to set current, because the link isn't in the list yet
         planeLinks.addLink(pcMirrored->MirrorPlane, getRefStr(pcMirrored->MirrorPlane.getValue(),pcMirrored->MirrorPlane.getSubValues()));
         planeLinks.setCurrentLink(pcMirrored->MirrorPlane);
     }
@@ -200,13 +200,14 @@ void TaskMirroredParameters::onSelectionChanged(const Gui::SelectionChanges& msg
             }
             exitSelectionMode();
         } else {
-            if ( selectionMode == reference) {
-                std::vector<std::string> mirrorPlanes;
-                App::DocumentObject* selObj;
-                PartDesign::Mirrored* pcMirrored = static_cast<PartDesign::Mirrored*>(getObject());
-                getReferencedSelection(pcMirrored, msg, selObj, mirrorPlanes);
-                if (!selObj)
+            std::vector<std::string> mirrorPlanes;
+            App::DocumentObject* selObj;
+            PartDesign::Mirrored* pcMirrored = static_cast<PartDesign::Mirrored*>(getObject());
+            getReferencedSelection(pcMirrored, msg, selObj, mirrorPlanes);
+            if (!selObj)
                     return;
+            
+            if ( selectionMode == reference || selObj->isDerivedFrom ( App::Plane::getClassTypeId () ) ) {
                 pcMirrored->MirrorPlane.setValue(selObj, mirrorPlanes);
                 recomputeFeature();
                 updateUI();
@@ -286,16 +287,16 @@ void TaskMirroredParameters::apply()
 TaskMirroredParameters::~TaskMirroredParameters()
 {
     //hide the parts coordinate system axis for selection
-    PartDesign::Body * body = PartDesign::Body::findBodyOf ( getObject() );
-    if ( body ) {
-        try {
+    try {
+        PartDesign::Body * body = PartDesign::Body::findBodyOf ( getObject() );
+        if ( body ) {
             App::Origin *origin = body->getOrigin();
             ViewProviderOrigin* vpOrigin;
             vpOrigin = static_cast<ViewProviderOrigin*>(Gui::Application::Instance->getViewProvider(origin));
             vpOrigin->resetTemporaryVisibility();
-        } catch (const Base::Exception &ex) {
-            Base::Console().Error ("%s\n", ex.what () );
         }
+    } catch (const Base::Exception &ex) {
+        Base::Console().Error ("%s\n", ex.what () );
     }
 
     delete ui;

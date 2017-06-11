@@ -102,32 +102,36 @@ void ViewProviderBoolean::updateData(const App::Property* prop)
 
             Gui::ViewProvider* vpBase = Gui::Application::Instance->getViewProvider(objBase);
             Gui::ViewProvider* vpTool = Gui::Application::Instance->getViewProvider(objTool);
-            std::vector<App::Color> colBase = static_cast<PartGui::ViewProviderPart*>(vpBase)->DiffuseColor.getValues();
-            std::vector<App::Color> colTool = static_cast<PartGui::ViewProviderPart*>(vpTool)->DiffuseColor.getValues();
-            std::vector<App::Color> colBool;
-            colBool.resize(boolMap.Extent(), this->ShapeColor.getValue());
+            if (vpBase && vpTool) {
+                std::vector<App::Color> colBase = static_cast<PartGui::ViewProviderPart*>(vpBase)->DiffuseColor.getValues();
+                std::vector<App::Color> colTool = static_cast<PartGui::ViewProviderPart*>(vpTool)->DiffuseColor.getValues();
+                std::vector<App::Color> colBool;
+                colBool.resize(boolMap.Extent(), this->ShapeColor.getValue());
+                applyTransparency(static_cast<PartGui::ViewProviderPart*>(vpBase)->Transparency.getValue(),colBase);
+                applyTransparency(static_cast<PartGui::ViewProviderPart*>(vpTool)->Transparency.getValue(),colTool);
 
-            bool setColor=false;
-            if (static_cast<int>(colBase.size()) == baseMap.Extent()) {
-                applyColor(hist[0], colBase, colBool);
-                setColor = true;
+                bool setColor=false;
+                if (static_cast<int>(colBase.size()) == baseMap.Extent()) {
+                    applyColor(hist[0], colBase, colBool);
+                    setColor = true;
+                }
+                else if (!colBase.empty() && colBase[0] != this->ShapeColor.getValue()) {
+                    colBase.resize(baseMap.Extent(), colBase[0]);
+                    applyColor(hist[0], colBase, colBool);
+                    setColor = true;
+                }
+                if (static_cast<int>(colTool.size()) == toolMap.Extent()) {
+                    applyColor(hist[1], colTool, colBool);
+                    setColor = true;
+                }
+                else if (!colTool.empty() && colTool[0] != this->ShapeColor.getValue()) {
+                    colTool.resize(toolMap.Extent(), colTool[0]);
+                    applyColor(hist[1], colTool, colBool);
+                    setColor = true;
+                }
+                if (setColor)
+                    this->DiffuseColor.setValues(colBool);
             }
-            else if (!colBase.empty() && colBase[0] != this->ShapeColor.getValue()) {
-                colBase.resize(baseMap.Extent(), colBase[0]);
-                applyColor(hist[0], colBase, colBool);
-                setColor = true;
-            }
-            if (static_cast<int>(colTool.size()) == toolMap.Extent()) {
-                applyColor(hist[1], colTool, colBool);
-                setColor = true;
-            }
-            else if (!colTool.empty() && colTool[0] != this->ShapeColor.getValue()) {
-                colTool.resize(toolMap.Extent(), colTool[0]);
-                applyColor(hist[1], colTool, colBool);
-                setColor = true;
-            }
-            if (setColor)
-                this->DiffuseColor.setValues(colBool);
         }
     }
     else if (prop->getTypeId() == App::PropertyLink::getClassTypeId()) {
@@ -202,15 +206,18 @@ void ViewProviderMultiFuse::updateData(const App::Property* prop)
             TopExp::MapShapes(baseShape, TopAbs_FACE, baseMap);
 
             Gui::ViewProvider* vpBase = Gui::Application::Instance->getViewProvider(objBase);
-            std::vector<App::Color> colBase = static_cast<PartGui::ViewProviderPart*>(vpBase)->DiffuseColor.getValues();
-            if (static_cast<int>(colBase.size()) == baseMap.Extent()) {
-                applyColor(hist[index], colBase, colBool);
-                setColor = true;
-            }
-            else if (!colBase.empty() && colBase[0] != this->ShapeColor.getValue()) {
-                colBase.resize(baseMap.Extent(), colBase[0]);
-                applyColor(hist[index], colBase, colBool);
-                setColor = true;
+            if (vpBase) {
+                std::vector<App::Color> colBase = static_cast<PartGui::ViewProviderPart*>(vpBase)->DiffuseColor.getValues();
+                applyTransparency(static_cast<PartGui::ViewProviderPart*>(vpBase)->Transparency.getValue(),colBase);
+                if (static_cast<int>(colBase.size()) == baseMap.Extent()) {
+                    applyColor(hist[index], colBase, colBool);
+                    setColor = true;
+                }
+                else if (!colBase.empty() && colBase[0] != this->ShapeColor.getValue()) {
+                    colBase.resize(baseMap.Extent(), colBase[0]);
+                    applyColor(hist[index], colBase, colBool);
+                    setColor = true;
+                }
             }
         }
 
@@ -244,6 +251,11 @@ bool ViewProviderMultiFuse::canDragObjects() const
     return true;
 }
 
+bool ViewProviderMultiFuse::canDragObject(App::DocumentObject* obj) const
+{
+    return obj->getTypeId().isDerivedFrom(Part::Feature::getClassTypeId());
+}
+
 void ViewProviderMultiFuse::dragObject(App::DocumentObject* obj)
 {
     Part::MultiFuse* pBool = static_cast<Part::MultiFuse*>(getObject());
@@ -260,6 +272,11 @@ void ViewProviderMultiFuse::dragObject(App::DocumentObject* obj)
 bool ViewProviderMultiFuse::canDropObjects() const
 {
     return true;
+}
+
+bool ViewProviderMultiFuse::canDropObject(App::DocumentObject* obj) const
+{
+    return obj->getTypeId().isDerivedFrom(Part::Feature::getClassTypeId());
 }
 
 void ViewProviderMultiFuse::dropObject(App::DocumentObject* obj)
@@ -321,15 +338,18 @@ void ViewProviderMultiCommon::updateData(const App::Property* prop)
             TopExp::MapShapes(baseShape, TopAbs_FACE, baseMap);
 
             Gui::ViewProvider* vpBase = Gui::Application::Instance->getViewProvider(objBase);
-            std::vector<App::Color> colBase = static_cast<PartGui::ViewProviderPart*>(vpBase)->DiffuseColor.getValues();
-            if (static_cast<int>(colBase.size()) == baseMap.Extent()) {
-                applyColor(hist[index], colBase, colBool);
-                setColor = true;
-            }
-            else if (!colBase.empty() && colBase[0] != this->ShapeColor.getValue()) {
-                colBase.resize(baseMap.Extent(), colBase[0]);
-                applyColor(hist[index], colBase, colBool);
-                setColor = true;
+            if (vpBase) {
+                std::vector<App::Color> colBase = static_cast<PartGui::ViewProviderPart*>(vpBase)->DiffuseColor.getValues();
+                applyTransparency(static_cast<PartGui::ViewProviderPart*>(vpBase)->Transparency.getValue(),colBase);
+                if (static_cast<int>(colBase.size()) == baseMap.Extent()) {
+                    applyColor(hist[index], colBase, colBool);
+                    setColor = true;
+                }
+                else if (!colBase.empty() && colBase[0] != this->ShapeColor.getValue()) {
+                    colBase.resize(baseMap.Extent(), colBase[0]);
+                    applyColor(hist[index], colBase, colBool);
+                    setColor = true;
+                }
             }
         }
 
@@ -363,6 +383,11 @@ bool ViewProviderMultiCommon::canDragObjects() const
     return true;
 }
 
+bool ViewProviderMultiCommon::canDragObject(App::DocumentObject* obj) const
+{
+    return obj->getTypeId().isDerivedFrom(Part::Feature::getClassTypeId());
+}
+
 void ViewProviderMultiCommon::dragObject(App::DocumentObject* obj)
 {
     Part::MultiCommon* pBool = static_cast<Part::MultiCommon*>(getObject());
@@ -379,6 +404,11 @@ void ViewProviderMultiCommon::dragObject(App::DocumentObject* obj)
 bool ViewProviderMultiCommon::canDropObjects() const
 {
     return true;
+}
+
+bool ViewProviderMultiCommon::canDropObject(App::DocumentObject* obj) const
+{
+    return obj->getTypeId().isDerivedFrom(Part::Feature::getClassTypeId());
 }
 
 void ViewProviderMultiCommon::dropObject(App::DocumentObject* obj)

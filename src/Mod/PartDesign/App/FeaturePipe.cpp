@@ -73,7 +73,7 @@ using namespace PartDesign;
 
 const char* Pipe::TypeEnums[] = {"FullPath","UpToFace",NULL};
 const char* Pipe::TransitionEnums[] = {"Transformed","Right corner", "Round corner",NULL};
-const char* Pipe::ModeEnums[] = {"Standart", "Fixed", "Frenet", "Auxillery", "Binormal", NULL};
+const char* Pipe::ModeEnums[] = {"Standard", "Fixed", "Frenet", "Auxillery", "Binormal", NULL};
 const char* Pipe::TransformEnums[] = {"Constant", "Multisection", "Linear", "S-shape", "Interpolation", NULL};
 
 
@@ -322,7 +322,7 @@ App::DocumentObjectExecReturn *Pipe::execute(void)
         return App::DocumentObject::StdReturn;
     }
     catch (Standard_Failure) {
-        Handle_Standard_Failure e = Standard_Failure::Caught();
+        Handle(Standard_Failure) e = Standard_Failure::Caught();
         return new App::DocumentObjectExecReturn(e->GetMessageString());
     }
     catch (...) {

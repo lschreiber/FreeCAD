@@ -37,8 +37,6 @@
 #include <stack>
 
 #include <boost/signals.hpp>
-#include <boost/graph/adjacency_list.hpp>
-
 
 namespace Base {
     class Writer;
@@ -68,6 +66,7 @@ public:
         SkipRecompute = 0,
         KeepTrailingDigits = 1,
         Closable = 2,
+        Restoring = 3
     };
 
     /** @name Properties */
@@ -95,11 +94,11 @@ public:
       * for the Creative Commons license suit.
       */
     App::PropertyString License;
-    /// License descripton/contract URL
+    /// License description/contract URL
     App::PropertyString LicenseURL;
-    /// Meta descriptons
+    /// Meta descriptions
     App::PropertyMap Meta;
-    /// Material descriptons, used and defined in the Material module.
+    /// Material descriptions, used and defined in the Material module.
     App::PropertyMap Material;
     /// read-only name of the temp dir created wen the document is opened
     PropertyString TransientDir;
@@ -184,6 +183,13 @@ public:
      * @param isNew       if false don't call the \c DocumentObject::setupObject() callback (default is true)
      */
     DocumentObject *addObject(const char* sType, const char* pObjectName=0, bool isNew=true);
+    /** Add an array of features of the given types and names.
+     * Unicode names are set through the Label propery.
+     * @param sType       The type of created object
+     * @param objectNames A list of object names
+     * @param isNew       If false don't call the \c DocumentObject::setupObject() callback (default is true)
+     */
+    std::vector<DocumentObject *>addObjects(const char* sType, const std::vector<std::string>& objectNames, bool isNew=true);
     /// Remove a feature out of the document
     void remObject(const char* sName);
     /** Add an existing feature with sName (ASCII) to this document and set it active.
@@ -246,8 +252,8 @@ public:
     void setClosable(bool);
     /// check whether the document can be closed
     bool isClosable() const;
-    /// Recompute all touched features
-    void recompute();
+    /// Recompute all touched features and return the amount of recalculated features
+    int recompute();
     /// Recompute only one feature
     void recomputeFeature(DocumentObject* Feat);
     /// get the error log from the recompute run
@@ -311,10 +317,15 @@ public:
     std::vector<App::DocumentObject*> getInList(const DocumentObject* me) const;
     /// Get a complete list of all objects the given objects depend on. The list
     /// also contains the given objects!
+    /// deprecated! Use In- and OutList mimic in the DocumentObject instead!
     std::vector<App::DocumentObject*> getDependencyList
         (const std::vector<App::DocumentObject*>&) const;
     // set Changed
     //void setChanged(DocumentObject* change);
+    /// get a list of topological sorted objects (https://en.wikipedia.org/wiki/Topological_sorting)
+    std::vector<App::DocumentObject*> topologicalSort() const;
+    /// get all root objects (objects no other one reference too)
+    std::vector<App::DocumentObject*> getRootObjects() const;
     //@}
 
     /// Function called to signal that an object identifier has been renamed
@@ -350,8 +361,10 @@ protected:
     /// callback from the Document objects after property was changed
     void onChangedProperty(const DocumentObject *Who, const Property *What);
     /// helper which Recompute only this feature
+    /// @return True if the recompute process of the Document shall be stopped, False if it shall be continued.
     bool _recomputeFeature(DocumentObject* Feat);
     void _clearRedos();
+
     /// refresh the internal dependency graph
     void _rebuildDependencyList(void);
     std::string getTransientDirectoryName(const std::string& uuid, const std::string& filename) const;

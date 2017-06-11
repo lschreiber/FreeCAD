@@ -56,6 +56,7 @@
 #include <boost/assign/list_of.hpp>
 #include <SMESH_Gen.hxx>
 #include <SMESH_Mesh.hxx>
+#include <SMESH_MeshEditor.hxx>
 #include <SMESH_Group.hxx>
 #include <SMDS_MeshGroup.hxx>
 #include <SMESHDS_GroupBase.hxx>
@@ -92,7 +93,7 @@ TYPESYSTEM_SOURCE(Fem::FemMesh , Base::Persistence);
 FemMesh::FemMesh()
 {
     //Base::Console().Log("FemMesh::FemMesh():%p (id=%i)\n",this,StatCount);
-    // create a mesh allways with new StudyId to avoid overlapping destruction
+    // create a mesh always with new StudyId to avoid overlapping destruction
     myMesh = getGenerator()->CreateMesh(StatCount++,false);
 }
 
@@ -106,11 +107,15 @@ FemMesh::~FemMesh()
 {
     //Base::Console().Log("FemMesh::~FemMesh():%p\n",this);
 
-    TopoDS_Shape aNull;
-    myMesh->ShapeToMesh(aNull);
-    myMesh->Clear();
-    //myMesh->ClearLog();
-    delete myMesh;
+    try {
+        TopoDS_Shape aNull;
+        myMesh->ShapeToMesh(aNull);
+        myMesh->Clear();
+        //myMesh->ClearLog();
+        delete myMesh;
+    }
+    catch (...) {
+    }
 }
 
 FemMesh &FemMesh::operator=(const FemMesh& mesh)
@@ -126,8 +131,122 @@ void FemMesh::copyMeshData(const FemMesh& mesh)
 {
     _Mtrx = mesh._Mtrx;
 
+    // See file SMESH_I/SMESH_Gen_i.cxx in the git repo of smesh at https://git.salome-platform.org
+#if 1
+    // 1. Get source mesh
+    SMESHDS_Mesh* srcMeshDS = mesh.myMesh->GetMeshDS();
+
+    // 2. Get target mesh
+    SMESHDS_Mesh* newMeshDS = this->myMesh->GetMeshDS();
+    SMESH_MeshEditor editor(this->myMesh);
+
+    // 3. Get elements to copy
+    SMDS_ElemIteratorPtr srcElemIt; SMDS_NodeIteratorPtr srcNodeIt;
+    srcElemIt = srcMeshDS->elementsIterator();
+    srcNodeIt = srcMeshDS->nodesIterator();
+
+    // 4. Copy elements
+    int iN;
+    const SMDS_MeshNode *nSrc, *nTgt;
+    std::vector< const SMDS_MeshNode* > nodes;
+    while (srcElemIt->more()) {
+        const SMDS_MeshElement * elem = srcElemIt->next();
+        // find / add nodes
+        nodes.resize(elem->NbNodes());
+        SMDS_ElemIteratorPtr nIt = elem->nodesIterator();
+        for (iN = 0; nIt->more(); ++iN) {
+            nSrc = static_cast<const SMDS_MeshNode*>( nIt->next() );
+            nTgt = newMeshDS->FindNode( nSrc->GetID());
+            if (!nTgt)
+                nTgt = newMeshDS->AddNodeWithID( nSrc->X(), nSrc->Y(), nSrc->Z(), nSrc->GetID());
+            nodes[iN] = nTgt;
+        }
+
+        // add elements
+        if (elem->GetType() != SMDSAbs_Node) {
+            int ID = elem->GetID();
+            switch (elem->GetEntityType()) {
+            case SMDSEntity_Polyhedra:
+                editor.GetMeshDS()->
+                    AddPolyhedralVolumeWithID(nodes,
+                                              static_cast<const SMDS_VtkVolume*>(elem)->GetQuantities(),
+                                              ID);
+                break;
+            case SMDSEntity_Ball:
+            {
+                SMESH_MeshEditor::ElemFeatures elemFeat;
+                elemFeat.Init(static_cast<const SMDS_BallElement*>(elem)->GetDiameter());
+                elemFeat.SetID(ID);
+                editor.AddElement(nodes, elemFeat);
+                break;
+            }
+            default:
+                {
+                    SMESH_MeshEditor::ElemFeatures elemFeat(elem->GetType(), elem->IsPoly());
+                    elemFeat.SetID(ID);
+                    editor.AddElement(nodes, elemFeat);
+                    break;
+                }
+            }
+        }
+    }
+
+    // 4(b). Copy free nodes
+    if (srcNodeIt && srcMeshDS->NbNodes() != newMeshDS->NbNodes()) {
+        while (srcNodeIt->more()) {
+            nSrc = srcNodeIt->next();
+            if (nSrc->NbInverseElements() == 0) {
+                nTgt = newMeshDS->AddNodeWithID(nSrc->X(), nSrc->Y(), nSrc->Z(), nSrc->GetID());
+            }
+        }
+    }
+
+    // 5. Copy groups
+    SMESH_Mesh::GroupIteratorPtr gIt = mesh.myMesh->GetGroups();
+    while (gIt->more()) {
+        SMESH_Group* group = gIt->next();
+        const SMESHDS_GroupBase* groupDS = group->GetGroupDS();
+
+        // Check group type. We copy nodal groups containing nodes of copied element
+        SMDSAbs_ElementType groupType = groupDS->GetType();
+        if (groupType != SMDSAbs_Node && newMeshDS->GetMeshInfo().NbElements( groupType ) == 0)
+            continue; // group type differs from types of meshPart
+
+        // Find copied elements in the group
+        std::vector< const SMDS_MeshElement* > groupElems;
+        SMDS_ElemIteratorPtr eIt = groupDS->GetElements();
+        const SMDS_MeshElement* foundElem;
+        if (groupType == SMDSAbs_Node) {
+            while (eIt->more()) {
+                if ((foundElem = newMeshDS->FindNode( eIt->next()->GetID())))
+                    groupElems.push_back(foundElem);
+            }
+        }
+        else {
+            while (eIt->more())
+                if ((foundElem = newMeshDS->FindElement(eIt->next()->GetID())))
+                    groupElems.push_back(foundElem);
+        }
+
+        // Make a new group
+        if (!groupElems.empty()) {
+            int aId;
+            SMESH_Group* newGroupObj = this->myMesh->AddGroup(groupType, group->GetName(), aId);
+            SMESHDS_Group* newGroupDS = dynamic_cast<SMESHDS_Group*>(newGroupObj->GetGroupDS());
+            if (newGroupDS) {
+                SMDS_MeshGroup& smdsGroup = ((SMESHDS_Group*)newGroupDS)->SMDSGroup();
+                for (unsigned i = 0; i < groupElems.size(); ++i)
+                    smdsGroup.Add(groupElems[i]);
+            }
+        }
+    }
+
+    newMeshDS->Modified();
+
+#else
     SMESHDS_Mesh* meshds = this->myMesh->GetMeshDS();
 
+    // Some further information is still not copied: http://forum.freecadweb.org/viewtopic.php?f=18&t=18982#p148114
     SMDS_NodeIteratorPtr aNodeIter = mesh.myMesh->GetMeshDS()->nodesIterator();
     for (;aNodeIter->more();) {
         const SMDS_MeshNode* aNode = aNodeIter->next();
@@ -353,6 +472,7 @@ void FemMesh::copyMeshData(const FemMesh& mesh)
             }
         }
     }
+#endif
 }
 
 const SMESH_Mesh* FemMesh::getSMesh() const
@@ -962,7 +1082,7 @@ void FemMesh::writeABAQUS(const std::string &Filename) const
     static std::map<int, std::string> faceTypeMap;
     static std::map<int, std::string> volTypeMap;
     if (elemOrderMap.empty()) {
-        // node order fits with node order in ccxFrdReader.py module to import CalculiX result meshes
+        // node order fits with node order in importCcxFrdResults.py module to import CalculiX result meshes
 
         // dimension 1
         //
@@ -1010,7 +1130,7 @@ void FemMesh::writeABAQUS(const std::string &Filename) const
         //
         // tetras
         // master 0.14 release
-        // changed to this in August 2013, commited by juergen (jriedel)
+        // changed to this in August 2013, committed by juergen (jriedel)
         // https://github.com/FreeCAD/FreeCAD/commit/af56b324b9566b20f3b6e7880c29354c1dbe7a99
         //std::vector<int> c3d4  = boost::assign::list_of(0)(3)(1)(2);
         //std::vector<int> c3d10 = boost::assign::list_of(0)(2)(1)(3)(6)(5)(4)(7)(9)(8);
@@ -1068,9 +1188,13 @@ void FemMesh::writeABAQUS(const std::string &Filename) const
 
     std::ofstream anABAQUS_Output;
     anABAQUS_Output.open(Filename.c_str());
+    anABAQUS_Output.precision(13);  // https://forum.freecadweb.org/viewtopic.php?f=18&t=22759#p176669
+    // add some text
+    anABAQUS_Output << "** written by FreeCAD inp file writer for CalculiX,Abaqus meshes" << std::endl << std::endl;
 
     // add nodes
     //
+    anABAQUS_Output << "** Nodes" << std::endl;
     anABAQUS_Output << "*Node, NSET=Nall" << std::endl;
     typedef std::map<int, Base::Vector3d> VertexMap;
     VertexMap vertexMap;
@@ -1094,6 +1218,7 @@ void FemMesh::writeABAQUS(const std::string &Filename) const
             << it->second.y << ", "
             << it->second.z << std::endl;
     }
+    anABAQUS_Output << std::endl << std::endl;;
 
     typedef std::map<int, std::vector<int> > NodesMap;
     typedef std::map<std::string, NodesMap> ElementsMap;
@@ -1118,7 +1243,8 @@ void FemMesh::writeABAQUS(const std::string &Filename) const
     }
 
     for (ElementsMap::iterator it = elementsMap.begin(); it != elementsMap.end(); ++it) {
-        anABAQUS_Output << "*Element, TYPE=" << it->first << ", ELSET=Eall" << std::endl;
+        anABAQUS_Output << "** Volume elements" << std::endl;
+        anABAQUS_Output << "*Element, TYPE=" << it->first << ", ELSET=Evolumes" << std::endl;
         for (NodesMap::iterator jt = it->second.begin(); jt != it->second.end(); ++jt) {
             anABAQUS_Output << jt->first;
             // Calculix allows max 16 enntries in one line, an hexa20 has more !
@@ -1138,9 +1264,13 @@ void FemMesh::writeABAQUS(const std::string &Filename) const
             }
             anABAQUS_Output << std::endl;
         }
+    anABAQUS_Output << std::endl;
     }
 
     if (!elementsMap.empty()) {
+        anABAQUS_Output << "** Define element set Eall" << std::endl;
+        anABAQUS_Output << "*ELSET, ELSET=Eall" << std::endl;
+        anABAQUS_Output << "Evolumes" << std::endl;
         anABAQUS_Output.close();
         return; // done
     }
@@ -1165,7 +1295,8 @@ void FemMesh::writeABAQUS(const std::string &Filename) const
     }
 
     for (ElementsMap::iterator it = elementsMap.begin(); it != elementsMap.end(); ++it) {
-        anABAQUS_Output << "*Element, TYPE=" << it->first << ", ELSET=Eall" << std::endl;
+        anABAQUS_Output << "** Face elements" << std::endl;
+        anABAQUS_Output << "*Element, TYPE=" << it->first << ", ELSET=Efaces" << std::endl;
         for (NodesMap::iterator jt = it->second.begin(); jt != it->second.end(); ++jt) {
             anABAQUS_Output << jt->first;
             for (std::vector<int>::iterator kt = jt->second.begin(); kt != jt->second.end(); ++kt) {
@@ -1173,9 +1304,13 @@ void FemMesh::writeABAQUS(const std::string &Filename) const
             }
             anABAQUS_Output << std::endl;
         }
+    anABAQUS_Output << std::endl;
     }
 
     if (!elementsMap.empty()) {
+        anABAQUS_Output << "** Define element set Eall" << std::endl;
+        anABAQUS_Output << "*ELSET, ELSET=Eall" << std::endl;
+        anABAQUS_Output << "Efaces" << std::endl;
         anABAQUS_Output.close();
         return; // done
     }
@@ -1200,7 +1335,8 @@ void FemMesh::writeABAQUS(const std::string &Filename) const
     }
 
     for (ElementsMap::iterator it = elementsMap.begin(); it != elementsMap.end(); ++it) {
-        anABAQUS_Output << "*Element, TYPE=" << it->first << ", ELSET=Eall" << std::endl;
+        anABAQUS_Output << "** Edge elements" << std::endl;
+        anABAQUS_Output << "*Element, TYPE=" << it->first << ", ELSET=Eedges" << std::endl;
         for (NodesMap::iterator jt = it->second.begin(); jt != it->second.end(); ++jt) {
             anABAQUS_Output << jt->first;
             for (std::vector<int>::iterator kt = jt->second.begin(); kt != jt->second.end(); ++kt) {
@@ -1208,9 +1344,13 @@ void FemMesh::writeABAQUS(const std::string &Filename) const
             }
             anABAQUS_Output << std::endl;
         }
+    anABAQUS_Output << std::endl;
     }
     elementsMap.clear();
 
+    anABAQUS_Output << "** Define element set Eall" << std::endl;
+    anABAQUS_Output << "*ELSET, ELSET=Eall" << std::endl;
+    anABAQUS_Output << "Eedges" << std::endl;
     anABAQUS_Output.close();
 }
 

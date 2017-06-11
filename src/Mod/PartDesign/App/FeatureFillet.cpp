@@ -78,6 +78,9 @@ App::DocumentObjectExecReturn *Fillet::execute(void)
         return new App::DocumentObjectExecReturn("Fillet not possible on selected shapes");
     
     double radius = Radius.getValue();
+    
+    if(radius <= 0)
+        return new App::DocumentObjectExecReturn("Fillet radius must be greater than zero");
 
     this->positionByBaseFeature();
 
@@ -110,7 +113,7 @@ App::DocumentObjectExecReturn *Fillet::execute(void)
         return App::DocumentObject::StdReturn;
     }
     catch (Standard_Failure) {
-        Handle_Standard_Failure e = Standard_Failure::Caught();
+        Handle(Standard_Failure) e = Standard_Failure::Caught();
         return new App::DocumentObjectExecReturn(e->GetMessageString());
     }
 }

@@ -29,17 +29,16 @@
 # include <boost/bind.hpp>
 # include <sstream>
 # include <stdexcept>
+# include <iostream>
 # include <QCloseEvent>
 # include <QDir>
 # include <QFileInfo>
 # include <QLocale>
 # include <QMessageBox>
-# include <QPointer>
-# include <QGLFormat>
-# include <QGLPixelBuffer>
-#if QT_VERSION >= 0x040200
-# include <QGLFramebufferObject>
+#if QT_VERSION >= 0x050000
+# include <QMessageLogContext>
 #endif
+# include <QPointer>
 # include <QSessionManager>
 # include <QStatusBar>
 # include <QTextStream>
@@ -47,7 +46,10 @@
 #endif
 
 #include <boost/interprocess/sync/file_lock.hpp>
-
+#include <QtOpenGL.h>
+#if defined(HAVE_QT5_OPENGL)
+#include <QWindow>
+#endif
 
 // FreeCAD Base header
 #include <Base/Console.h>
@@ -162,111 +164,6 @@ struct ApplicationP
     CommandManager commandManager;
 };
 
-/** Observer that watches relabeled objects and make sure that the labels inside
- * a document are unique.
- * @note In the FreeCAD design it is explicitly allowed to have duplicate labels
- * (i.e. the user visible text e.g. in the tree view) while the internal names
- * are always guaranteed to be unique.
- */
-class ObjectLabelObserver
-{
-public:
-    /// The one and only instance.
-    static ObjectLabelObserver* instance();
-    /// Destructs the sole instance.
-    static void destruct ();
-
-    /** Checks the new label of the object and relabel it if needed
-     * to make it unique document-wide
-     */
-    void slotRelabelObject(const App::DocumentObject&, const App::Property&);
-
-private:
-    static ObjectLabelObserver* _singleton;
-
-    ObjectLabelObserver();
-    ~ObjectLabelObserver();
-    const App::DocumentObject* current;
-    ParameterGrp::handle _hPGrp;
-};
-
-ObjectLabelObserver* ObjectLabelObserver::_singleton = 0;
-
-ObjectLabelObserver* ObjectLabelObserver::instance()
-{
-    if (!_singleton)
-        _singleton = new ObjectLabelObserver;
-    return _singleton;
-}
-
-void ObjectLabelObserver::destruct ()
-{
-    delete _singleton;
-    _singleton = 0;
-}
-
-void ObjectLabelObserver::slotRelabelObject(const App::DocumentObject& obj, const App::Property& prop)
-{
-    // observe only the Label property
-    if (&prop == &obj.Label) {
-        // have we processed this (or another?) object right now?
-        if (current) {
-            return;
-        }
-
-        std::string label = obj.Label.getValue();
-        App::Document* doc = obj.getDocument();
-        if (doc && !_hPGrp->GetBool("DuplicateLabels")) {
-            std::vector<std::string> objectLabels;
-            std::vector<App::DocumentObject*>::const_iterator it;
-            std::vector<App::DocumentObject*> objs = doc->getObjects();
-            bool match = false;
-
-            for (it = objs.begin();it != objs.end();++it) {
-                if (*it == &obj)
-                    continue; // don't compare object with itself
-                std::string objLabel = (*it)->Label.getValue();
-                if (!match && objLabel == label)
-                    match = true;
-                objectLabels.push_back(objLabel);
-            }
-
-            // make sure that there is a name conflict otherwise we don't have to do anything
-            if (match && !label.empty()) {
-                // remove number from end to avoid lengthy names
-                size_t lastpos = label.length()-1;
-                while (label[lastpos] >= 48 && label[lastpos] <= 57) {
-                    // if 'lastpos' becomes 0 then all characters are digits. In this case we use
-                    // the complete label again
-                    if (lastpos == 0) {
-                        lastpos = label.length()-1;
-                        break;
-                    }
-                    lastpos--;
-                }
-
-                label = label.substr(0, lastpos+1);
-                label = Base::Tools::getUniqueName(label, objectLabels, 3);
-                this->current = &obj;
-                const_cast<App::DocumentObject&>(obj).Label.setValue(label);
-                this->current = 0;
-            }
-        }
-    }
-}
-
-ObjectLabelObserver::ObjectLabelObserver() : current(0)
-{
-    App::GetApplication().signalChangedObject.connect(boost::bind
-        (&ObjectLabelObserver::slotRelabelObject, this, _1, _2));
-    _hPGrp = App::GetApplication().GetUserParameter().GetGroup("BaseApp");
-    _hPGrp = _hPGrp->GetGroup("Preferences")->GetGroup("Document");
-}
-
-ObjectLabelObserver::~ObjectLabelObserver()
-{
-}
-
 static PyObject *
 FreeCADGui_subgraphFromObject(PyObject * /*self*/, PyObject *args)
 {
@@ -315,8 +212,59 @@ FreeCADGui_getSoDBVersion(PyObject * /*self*/, PyObject *args)
 {
     if (!PyArg_ParseTuple(args, ""))
         return NULL;
+#if PY_MAJOR_VERSION >= 3
+    return PyUnicode_FromString(SoDB::getVersion());
+#else
     return PyString_FromString(SoDB::getVersion());
+#endif
 }
+
+// Copied from https://github.com/python/cpython/blob/master/Objects/moduleobject.c
+#if PY_MAJOR_VERSION >= 3
+#if PY_MINOR_VERSION <= 4
+static int
+_add_methods_to_object(PyObject *module, PyObject *name, PyMethodDef *functions)
+{
+    PyObject *func;
+    PyMethodDef *fdef;
+
+    for (fdef = functions; fdef->ml_name != NULL; fdef++) {
+        if ((fdef->ml_flags & METH_CLASS) ||
+            (fdef->ml_flags & METH_STATIC)) {
+            PyErr_SetString(PyExc_ValueError,
+                            "module functions cannot set"
+                            " METH_CLASS or METH_STATIC");
+            return -1;
+        }
+        func = PyCFunction_NewEx(fdef, (PyObject*)module, name);
+        if (func == NULL) {
+            return -1;
+        }
+        if (PyObject_SetAttrString(module, fdef->ml_name, func) != 0) {
+            Py_DECREF(func);
+            return -1;
+        }
+        Py_DECREF(func);
+    }
+
+    return 0;
+}
+
+int
+PyModule_AddFunctions(PyObject *m, PyMethodDef *functions)
+{
+    int res;
+    PyObject *name = PyModule_GetNameObject(m);
+    if (name == NULL) {
+        return -1;
+    }
+
+    res = _add_methods_to_object(m, name, functions);
+    Py_DECREF(name);
+    return res;
+}
+#endif
+#endif
 
 struct PyMethodDef FreeCADGui_methods[] = {
     {"subgraphFromObject",FreeCADGui_subgraphFromObject,METH_VARARGS,
@@ -332,10 +280,10 @@ struct PyMethodDef FreeCADGui_methods[] = {
 
 Gui::MDIView* Application::activeView(void) const
 {
-	if (activeDocument())
-		return activeDocument()->getActiveView();
-	else
-		return NULL;
+    if (activeDocument())
+        return activeDocument()->getActiveView();
+    else
+        return NULL;
 }
 
 } // namespace Gui
@@ -370,7 +318,7 @@ Application::Application(bool GUIenabled)
                 QLatin1String("Your system uses the same symbol for decimal point and group separator.\n\n"
                               "This causes serious problems and makes the application fail to work properly.\n"
                               "Go to the system configuration panel of the OS and fix this issue, please."));
-            throw Base::Exception("Invalid system settings");
+            throw Base::RuntimeError("Invalid system settings");
         }
 #endif
 #if 0 // QuantitySpinBox and InputField try to handle the group separator now
@@ -384,7 +332,8 @@ Application::Application(bool GUIenabled)
 
         // setting up Python binding
         Base::PyGILStateLocker lock;
-        PyObject* module = Py_InitModule3("FreeCADGui", Application::Methods,
+
+        PyDoc_STRVAR(FreeCADGui_doc,
             "The functions in the FreeCADGui module allow working with GUI documents,\n"
             "view providers, views, workbenches and much more.\n\n"
             "The FreeCADGui instance provides a list of references of GUI documents which\n"
@@ -392,7 +341,30 @@ Application::Application(bool GUIenabled)
             "objects in the associated App document. An App and GUI document can be\n"
             "accessed with the same name.\n\n"
             "The FreeCADGui module also provides a set of functions to work with so called\n"
-            "workbenches.");
+            "workbenches."
+            );
+
+#if PY_MAJOR_VERSION >= 3
+        // if this returns a valid pointer then the 'FreeCADGui' Python module was loaded,
+        // otherwise the executable was launched
+        PyObject *module = PyImport_AddModule("FreeCADGui");
+        if (!module) {
+            static struct PyModuleDef FreeCADGuiModuleDef = {
+                PyModuleDef_HEAD_INIT,
+                "FreeCADGui", FreeCADGui_doc, -1,
+                Application::Methods,
+                NULL, NULL, NULL, NULL
+            };
+            module = PyModule_Create(&FreeCADGuiModuleDef);
+            _PyImport_FixupBuiltin(module, "FreeCADGui");
+        }
+        else {
+            // extend the method list
+            PyModule_AddFunctions(module, Application::Methods);
+        }
+#else
+        PyObject* module = Py_InitModule3("FreeCADGui", Application::Methods, FreeCADGui_doc);
+#endif
         Py::Module(module).setAttr(std::string("ActiveDocument"),Py::None());
 
         UiLoaderPy::init_type();
@@ -406,8 +378,17 @@ Application::Application(bool GUIenabled)
         PyModule_AddObject(module, "PySideUic", pySide->module().ptr());
 
         //insert Selection module
-        PyObject* pSelectionModule = Py_InitModule3("Selection", SelectionSingleton::Methods,
-            "Selection module");
+#if PY_MAJOR_VERSION >= 3
+        static struct PyModuleDef SelectionModuleDef = {
+            PyModuleDef_HEAD_INIT,
+            "Selection", "Selection module", -1,
+            SelectionSingleton::Methods,
+            NULL, NULL, NULL, NULL
+        };
+        PyObject* pSelectionModule = PyModule_Create(&SelectionModuleDef);
+#else
+        PyObject* pSelectionModule = Py_InitModule3("Selection", SelectionSingleton::Methods,"Selection module");
+#endif
         Py_INCREF(pSelectionModule);
         PyModule_AddObject(module, "Selection", pSelectionModule);
 
@@ -453,9 +434,10 @@ Application::Application(bool GUIenabled)
     // instanciate the workbench dictionary
     _pcWorkbenchDictionary = PyDict_New();
 
-    createStandardOperations();
-    MacroCommand::load();
-    ObjectLabelObserver::instance();
+    if (GUIenabled) {
+        createStandardOperations();
+        MacroCommand::load();
+    }
 }
 
 Application::~Application()
@@ -488,7 +470,12 @@ Application::~Application()
     }
 
     // save macros
-    MacroCommand::save();
+    try {
+        MacroCommand::save();
+    }
+    catch (const Base::Exception& e) {
+        std::cerr << "Saving macros failed: " << e.what() << std::endl;
+    }
     //App::GetApplication().Detach(this);
 
     delete d;
@@ -696,6 +683,7 @@ void Application::slotDeleteDocument(const App::Document& Doc)
 
     // We must clear the selection here to notify all observers
     Gui::Selection().clearSelection(doc->second->getDocument()->getName());
+    doc->second->signalDeleteDocument(*doc->second);
     signalDeleteDocument(*doc->second);
 
     // If the active document gets destructed we must set it to 0. If there are further existing documents then the 
@@ -1137,7 +1125,7 @@ bool Application::activateWorkbench(const char* name)
         }
 
         Base::Console().Error("%s\n", (const char*)msg.toLatin1());
-        Base::Console().Log("%s\n", e.getStackTrace().c_str());
+        Base::Console().Error("%s\n", e.getStackTrace().c_str());
         if (!d->startingUp) {
             wc.restoreCursor();
             QMessageBox::critical(getMainWindow(), QObject::tr("Workbench failure"), 
@@ -1300,7 +1288,11 @@ QStringList Application::workbenches(void) const
     // insert all items
     while (PyDict_Next(_pcWorkbenchDictionary, &pos, &key, &value)) {
         /* do something interesting with the values... */
+#if PY_MAJOR_VERSION >= 3
+        const char* wbName = PyUnicode_AsUTF8(key);
+#else
         const char* wbName = PyString_AsString(key);
+#endif
         // add only allowed workbenches
         bool ok = true;
         if (!extra.isEmpty()&&ok) {
@@ -1370,11 +1362,49 @@ CommandManager &Application::commandManager(void)
 }
 
 //**************************************************************************
-// Init, Destruct and ingleton
+// Init, Destruct and singleton
 
+#if QT_VERSION >= 0x050000
+typedef void (*_qt_msg_handler_old)(QtMsgType, const QMessageLogContext &, const QString &);
+#else
 typedef void (*_qt_msg_handler_old)(QtMsgType type, const char *msg);
+#endif
 _qt_msg_handler_old old_qtmsg_handler = 0;
 
+#if QT_VERSION >= 0x050000
+void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    Q_UNUSED(context);
+#ifdef FC_DEBUG
+    switch (type)
+    {
+#if QT_VERSION >= 0x050500
+    case QtInfoMsg:
+#endif
+    case QtDebugMsg:
+        Base::Console().Message("%s\n", msg.toUtf8().constData());
+        break;
+    case QtWarningMsg:
+        Base::Console().Warning("%s\n", msg.toUtf8().constData());
+        break;
+    case QtCriticalMsg:
+        Base::Console().Error("%s\n", msg.toUtf8().constData());
+        break;
+    case QtFatalMsg:
+        Base::Console().Error("%s\n", msg.toUtf8().constData());
+        abort();                    // deliberately core dump
+    }
+#ifdef FC_OS_WIN32
+    if (old_qtmsg_handler)
+        (*old_qtmsg_handler)(type, context, msg);
+#endif
+#else
+    // do not stress user with Qt internals but write to log file if enabled
+    Q_UNUSED(type);
+    Base::Console().Log("%s\n", msg.toUtf8().constData());
+#endif
+}
+#else
 void messageHandler(QtMsgType type, const char *msg)
 {
 #ifdef FC_DEBUG
@@ -1403,6 +1433,7 @@ void messageHandler(QtMsgType type, const char *msg)
     Base::Console().Log("%s\n", msg);
 #endif
 }
+#endif
 
 #ifdef FC_DEBUG // redirect Coin messages to FreeCAD
 void messageHandlerCoin(const SoError * error, void * /*userdata*/)
@@ -1424,7 +1455,11 @@ void messageHandlerCoin(const SoError * error, void * /*userdata*/)
         }
 #ifdef FC_OS_WIN32
     if (old_qtmsg_handler)
+#if QT_VERSION >=0x050000
+        (*old_qtmsg_handler)(QtDebugMsg, QMessageLogContext(), QString::fromLatin1(msg));
+#else
         (*old_qtmsg_handler)(QtDebugMsg, msg);
+#endif
 #endif
     }
     else if (error) {
@@ -1455,7 +1490,11 @@ void Application::initApplication(void)
         initTypes();
         new Base::ScriptProducer( "FreeCADGuiInit", FreeCADGuiInit );
         init_resources();
+#if QT_VERSION >=0x050000
+        old_qtmsg_handler = qInstallMessageHandler(messageHandler);
+#else
         old_qtmsg_handler = qInstallMsgHandler(messageHandler);
+#endif
         init = true;
     }
     catch (...) {
@@ -1537,6 +1576,14 @@ void Application::runApplication(void)
     // http://forum.freecadweb.org/viewtopic.php?f=3&t=15540
     mainApp.setAttribute(Qt::AA_DontShowIconsInMenus, false);
 
+#ifdef Q_OS_UNIX
+    // Make sure that we use '.' as decimal point. See also
+    // http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=559846
+    // and issue #0002891
+    // http://doc.qt.io/qt-5/qcoreapplication.html#locale-settings
+    setlocale(LC_NUMERIC, "C");
+#endif
+
     // check if a single or multiple instances can run
     it = cfg.find("SingleInstance");
     if (it != cfg.end() && mainApp.isRunning()) {
@@ -1564,6 +1611,14 @@ void Application::runApplication(void)
         return;
     }
 
+#if QT_VERSION >= 0x050600
+    //Enable automatic scaling based on pixel density fo display (added in Qt 5.6)
+    mainApp.setAttribute(Qt::AA_EnableHighDpiScaling);
+#endif
+#if QT_VERSION >= 0x050100
+    //Enable support for highres images (added in Qt 5.1, but off by default)
+    mainApp.setAttribute(Qt::AA_UseHighDpiPixmaps);
+#endif
     // set application icon and window title
     it = cfg.find("Application");
     if (it != cfg.end()) {
@@ -1572,7 +1627,9 @@ void Application::runApplication(void)
     else {
         mainApp.setApplicationName(QString::fromUtf8(App::GetApplication().getExecutableName()));
     }
+#ifndef Q_OS_MACX
     mainApp.setWindowIcon(Gui::BitmapFactory().pixmap(App::Application::Config()["AppIcon"].c_str()));
+#endif
     QString plugin;
     plugin = QString::fromUtf8(App::GetApplication().getHomePath());
     plugin += QLatin1String("/plugins");
@@ -1589,26 +1646,22 @@ void Application::runApplication(void)
     ActionStyleEvent::EventType = QEvent::registerEventType(QEvent::User + 1);
 
     // check for OpenGL
+#if !defined(HAVE_QT5_OPENGL)
     if (!QGLFormat::hasOpenGL()) {
         QMessageBox::critical(0, QObject::tr("No OpenGL"), QObject::tr("This system does not support OpenGL"));
-        throw Base::Exception("This system does not support OpenGL");
+        throw Base::RuntimeError("This system does not support OpenGL");
     }
-#if QT_VERSION >= 0x040200
     if (!QGLFramebufferObject::hasOpenGLFramebufferObjects()) {
         Base::Console().Log("This system does not support framebuffer objects\n");
     }
-#endif
     if (!QGLPixelBuffer::hasOpenGLPbuffers()) {
         Base::Console().Log("This system does not support pbuffers\n");
     }
 
     QGLFormat::OpenGLVersionFlags version = QGLFormat::openGLVersionFlags ();
-#if QT_VERSION >= 0x040500
     if (version & QGLFormat::OpenGL_Version_3_0)
         Base::Console().Log("OpenGL version 3.0 or higher is present\n");
-    else
-#endif
-    if (version & QGLFormat::OpenGL_Version_2_1)
+    else if (version & QGLFormat::OpenGL_Version_2_1)
         Base::Console().Log("OpenGL version 2.1 or higher is present\n");
     else if (version & QGLFormat::OpenGL_Version_2_0)
         Base::Console().Log("OpenGL version 2.0 or higher is present\n");
@@ -1624,8 +1677,9 @@ void Application::runApplication(void)
         Base::Console().Log("OpenGL version 1.1 or higher is present\n");
     else if (version & QGLFormat::OpenGL_Version_None)
         Base::Console().Log("No OpenGL is present or no OpenGL context is current\n");
+#endif
 
-#if !defined(Q_WS_X11)
+#if !defined(Q_OS_LINUX)
     QIcon::setThemeSearchPaths(QIcon::themeSearchPaths() << QString::fromLatin1(":/icons/FreeCAD-default"));
     QIcon::setThemeName(QLatin1String("FreeCAD-default"));
 #endif
@@ -1657,6 +1711,30 @@ void Application::runApplication(void)
     int size = hGrp->GetInt("ToolbarIconSize", 0);
     if (size >= 16) // must not be lower than this
         mw.setIconSize(QSize(size,size));
+
+#if defined(HAVE_QT5_OPENGL)
+    {
+        QWindow window;
+        window.setSurfaceType(QWindow::OpenGLSurface);
+        window.create();
+
+        QOpenGLContext context;
+        if (context.create()) {
+            context.makeCurrent(&window);
+            if (!context.functions()->hasOpenGLFeature(QOpenGLFunctions::Framebuffers)) {
+                Base::Console().Log("This system does not support framebuffer objects\n");
+            }
+            if (!context.functions()->hasOpenGLFeature(QOpenGLFunctions::NPOTTextures)) {
+                Base::Console().Log("This system does not support NPOT textures\n");
+            }
+
+            int major = context.format().majorVersion();
+            int minor = context.format().minorVersion();
+            const char* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+            Base::Console().Log("OpenGL version is: %d.%d (%s)\n", major, minor, glVersion);
+        }
+    }
+#endif
 
     // init the Inventor subsystem
     SoDB::init();
@@ -1759,6 +1837,23 @@ void Application::runApplication(void)
             qApp->sendEvent(&mw, &e);
         }
     }
+#if QT_VERSION == 0x050600 && defined(Q_OS_WIN32)
+    else {
+        // Under Windows the tree indicator branch gets corrupted after a while.
+        // For more details see also https://bugreports.qt.io/browse/QTBUG-52230
+        // and https://codereview.qt-project.org/#/c/154357/2//ALL,unified
+        // A workaround for Qt 5.6.0 is to set a minimal style sheet.
+        QString qss = QString::fromLatin1(
+               "QTreeView::branch:closed:has-children  {\n"
+               "    image: url(:/icons/style/windows_branch_closed.png);\n"
+               "}\n"
+               "\n"
+               "QTreeView::branch:open:has-children  {\n"
+               "    image: url(:/icons/style/windows_branch_open.png);\n"
+               "}\n");
+        qApp->setStyleSheet(qss);
+    }
+#endif
 
     //initialize spaceball.
     mainApp.initSpaceball(&mw);
@@ -1775,6 +1870,10 @@ void Application::runApplication(void)
 
     // run the Application event loop
     Base::Console().Log("Init: Entering event loop\n");
+
+    // boot phase reference point
+    // https://forum.freecadweb.org/viewtopic.php?f=10&t=21665
+    Gui::getMainWindow()->setProperty("eventLoop", true);
 
     try {
         std::stringstream s;

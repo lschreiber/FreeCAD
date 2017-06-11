@@ -36,6 +36,7 @@
 #include <Base/BoundBox.h>
 
 class gp_Pnt;
+class gp_Ax2;
 
 namespace TechDrawGeometry
 {
@@ -52,6 +53,25 @@ struct splitPoint {
     double param;
 };
 
+class edgeSortItem
+{
+public:
+    edgeSortItem() {
+        startAngle = endAngle = 0.0;
+        idx = 0;
+    }
+    ~edgeSortItem() {}
+
+    Base::Vector3d start;
+    Base::Vector3d end;
+    double startAngle;
+    double endAngle;
+    unsigned int idx;
+
+    static bool edgeLess(const edgeSortItem& e1, const edgeSortItem& e2);
+    static bool edgeEqual(const edgeSortItem& e1, const edgeSortItem& e2);
+    std::string dump(void);
+};
 class TechDrawExport DrawProjectSplit
 {
 public:
@@ -60,16 +80,17 @@ public:
 
 public:
     static std::vector<TopoDS_Edge> getEdgesForWalker(TopoDS_Shape shape, double scale, Base::Vector3d direction);
-    static TechDrawGeometry::GeometryObject*  buildGeometryObject(TopoDS_Shape shape, gp_Pnt& center, Base::Vector3d direction);
+    static TechDrawGeometry::GeometryObject*  buildGeometryObject(TopoDS_Shape shape, const gp_Ax2& viewAxis);
 
     static bool isOnEdge(TopoDS_Edge e, TopoDS_Vertex v, double& param, bool allowEnds = false);
     static std::vector<TopoDS_Edge> splitEdges(std::vector<TopoDS_Edge> orig, std::vector<splitPoint> splits);
     static std::vector<TopoDS_Edge> split1Edge(TopoDS_Edge e, std::vector<splitPoint> splitPoints);
-    static double simpleMinDist(TopoDS_Shape s1, TopoDS_Shape s2); //const;   //probably sb static or DrawUtil
 
     static std::vector<splitPoint> sortSplits(std::vector<splitPoint>& s, bool ascend);
     static bool splitCompare(const splitPoint& p1, const splitPoint& p2);
     static bool splitEqual(const splitPoint& p1, const splitPoint& p2);
+    static std::vector<TopoDS_Edge> removeDuplicateEdges(std::vector<TopoDS_Edge>& inEdges);
+    static std::vector<edgeSortItem> sortEdges(std::vector<edgeSortItem>& e, bool ascend);
 
 protected:
     static std::vector<TopoDS_Edge> getEdges(TechDrawGeometry::GeometryObject* geometryObject);

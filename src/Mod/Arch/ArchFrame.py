@@ -29,17 +29,27 @@ if FreeCAD.GuiUp:
     from DraftTools import translate
     from PySide.QtCore import QT_TRANSLATE_NOOP
 else:
+    # \cond
     def translate(ctxt,txt):
         return txt
     def QT_TRANSLATE_NOOP(ctxt,txt):
         return txt
+    # \endcond
+    
+## @package ArchFrame
+#  \ingroup ARCH
+#  \brief The Frame object and tools
+#
+#  This module provides tools to build Frame objects.
+#  Frames are objects made of a profile and an object with
+#  edges along which the profile gets extruded
 
 __title__="FreeCAD Arch Frame"
 __author__ = "Yorik van Havre"
 __url__ = "http://www.freecadweb.org"
 
 # Possible roles for frames
-Roles = ['Covering','Member','Railing','Shading Device','Tendon']
+Roles = ['Undefined','Covering','Member','Railing','Shading Device','Tendon']
 
 def makeFrame(baseobj,profile,name=translate("Arch","Frame")):
     """makeFrame(baseobj,profile,[name]): creates a frame object from a base sketch (or any other object
@@ -64,7 +74,7 @@ class _CommandFrame:
         return {'Pixmap'  : 'Arch_Frame',
                 'MenuText': QT_TRANSLATE_NOOP("Arch_Frame","Frame"),
                 'Accel': "F, R",
-                'ToolTip': QT_TRANSLATE_NOOP("Arch_Frame","Creates a frame object from a planar 2D object and a profile")}
+                'ToolTip': QT_TRANSLATE_NOOP("Arch_Frame","Creates a frame object from a planar 2D object (the extrusion path(s)) and a profile. Make sure objects are selected in that order.")}
 
     def IsActive(self):
         return not FreeCAD.ActiveDocument is None
@@ -74,7 +84,9 @@ class _CommandFrame:
         if len(s) == 2:
             FreeCAD.ActiveDocument.openTransaction(translate("Arch","Create Frame"))
             FreeCADGui.addModule("Arch")
-            FreeCADGui.doCommand("Arch.makeFrame(FreeCAD.ActiveDocument."+s[0].Name+",FreeCAD.ActiveDocument."+s[1].Name+")")
+            FreeCADGui.doCommand("obj = Arch.makeFrame(FreeCAD.ActiveDocument."+s[0].Name+",FreeCAD.ActiveDocument."+s[1].Name+")")
+            FreeCADGui.addModule("Draft")
+            FreeCADGui.doCommand("Draft.autogroup(obj)")
             FreeCAD.ActiveDocument.commitTransaction()
             FreeCAD.ActiveDocument.recompute()
 
@@ -88,9 +100,12 @@ class _Frame(ArchComponent.Component):
         obj.addProperty("App::PropertyBool","Align","Arch",QT_TRANSLATE_NOOP("App::Property","Specifies if the profile must be aligned with the extrusion wires"))
         obj.addProperty("App::PropertyVectorDistance","Offset","Arch",QT_TRANSLATE_NOOP("App::Property","An offset vector between the base sketch and the frame"))
         obj.addProperty("App::PropertyInteger","BasePoint","Arch",QT_TRANSLATE_NOOP("App::Property","Crossing point of the path on the profile."))
+        obj.addProperty("App::PropertyPlacement","ProfilePlacement","Arch",QT_TRANSLATE_NOOP("App::Property","An optional additional placement to add to the profile before extruding it"))
         obj.addProperty("App::PropertyAngle","Rotation","Arch",QT_TRANSLATE_NOOP("App::Property","The rotation of the profile around its extrusion axis"))
         self.Type = "Frame"
+        obj.Align = True
         obj.Role = Roles
+        obj.Role = "Railing"
 
     def execute(self,obj):
         
@@ -124,6 +139,9 @@ class _Frame(ArchComponent.Component):
                         return
             import DraftGeomUtils, Part, math
             baseprofile = obj.Profile.Shape.copy()
+            if hasattr(obj,"ProfilePlacement"):
+                if not obj.ProfilePlacement.isNull():
+                    baseprofile.Placement = obj.ProfilePlacement.multiply(baseprofile.Placement)
             if not baseprofile.Faces:
                 f = []
                 for w in baseprofile.Wires:

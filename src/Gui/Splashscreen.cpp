@@ -34,6 +34,10 @@
 # include <Inventor/C/basic.h>
 #endif
 
+#if QT_VERSION < 0x050000
+# include <QGLContext>
+#endif
+
 #include <LibraryVersions.h>
 
 #include "Splashscreen.h"
@@ -140,10 +144,16 @@ public:
                 return;
         }
 
-        splash->showMessage(msg.replace(QLatin1String("\n"), QString()), alignment, textColor);
-        QMutex mutex;
-        QMutexLocker ml(&mutex);
-        QWaitCondition().wait(&mutex, 50);
+#if QT_VERSION < 0x050000
+        const QGLContext* ctx = QGLContext::currentContext();
+        if (!ctx)
+#endif
+        {
+            splash->showMessage(msg.replace(QLatin1String("\n"), QString()), alignment, textColor);
+            QMutex mutex;
+            QMutexLocker ml(&mutex);
+            QWaitCondition().wait(&mutex, 50);
+        }
     }
 
 private:
@@ -314,6 +324,16 @@ static QString getOperatingSystem()
             return QString::fromLatin1("Mac OS X 10.8");
         case QSysInfo::MV_10_9:
             return QString::fromLatin1("Mac OS X 10.9");
+        case QSysInfo::MV_10_10:
+            return QString::fromLatin1("Mac OS X 10.10");
+#endif
+#if QT_VERSION >= 0x050500
+        case QSysInfo::MV_10_11:
+            return QString::fromLatin1("Mac OS X 10.11");
+#endif
+#if QT_VERSION >= 0x050600
+        case QSysInfo::MV_10_12:
+            return QString::fromLatin1("Mac OS X 10.12");
 #endif
         default:
             return QString::fromLatin1("Mac OS X");

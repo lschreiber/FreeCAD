@@ -61,21 +61,14 @@ using namespace Sketcher;
 //**************************************************************************
 // Construction/Destruction
 
-DrawSketchHandler::DrawSketchHandler()
-        : sketchgui(0)
-{
+DrawSketchHandler::DrawSketchHandler() : sketchgui(0) {}
 
-}
-
-DrawSketchHandler::~DrawSketchHandler()
-{
-
-}
+DrawSketchHandler::~DrawSketchHandler() {}
 
 void DrawSketchHandler::quit(void)
 {
     assert(sketchgui);
-    sketchgui->drawEdit(std::vector<Base::Vector2D>());
+    sketchgui->drawEdit(std::vector<Base::Vector2d>());
     resetPositionText();
 
     unsetCursor();
@@ -133,7 +126,7 @@ void DrawSketchHandler::unsetCursor(void)
 }
 
 int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggestedConstraints,
-                                          const Base::Vector2D& Pos, const Base::Vector2D& Dir,
+                                          const Base::Vector2d& Pos, const Base::Vector2d& Dir,
                                           AutoConstraint::TargetType type)
 {
     suggestedConstraints.clear();
@@ -191,11 +184,11 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
             constr.Type = Sketcher::Tangent;
         
         if(constr.Type == Sketcher::Tangent && Dir.Length() > 1e-8 && hitShapeDir.Length() > 1e-8) { // We are hitting a line and have hitting vector information
-            Base::Vector3d dir3d = Base::Vector3d(Dir.fX,Dir.fY,0);
+            Base::Vector3d dir3d = Base::Vector3d(Dir.x,Dir.y,0);
             double cosangle=dir3d.Normalize()*hitShapeDir.Normalize();
             
             // the angle between the line and the hitting direction are over around 6 degrees (it is substantially parallel)
-            // or if it is an sketch axis (that can not move to accomodate to the shape), then only if it is around 6 degrees with the normal (around 84 degrees)
+            // or if it is an sketch axis (that can not move to accommodate to the shape), then only if it is around 6 degrees with the normal (around 84 degrees)
             if (fabs(cosangle) < 0.995f || ((GeoId==Sketcher::GeoEnum::HAxis || GeoId==Sketcher::GeoEnum::VAxis) && fabs(cosangle) < 0.1))
                 suggestedConstraints.push_back(constr);
             
@@ -221,7 +214,7 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
     constr.Type = Sketcher::None;
     constr.GeoId = Constraint::GeoUndef;
     constr.PosId = Sketcher::none;
-    double angle = std::abs(atan2(Dir.fY, Dir.fX));
+    double angle = std::abs(atan2(Dir.y, Dir.x));
     if (angle < angleDevRad || (M_PI - angle) < angleDevRad )
         // Suggest horizontal constraint
         constr.Type = Sketcher::Horizontal;
@@ -243,9 +236,9 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
     // Get geometry list
     const std::vector<Part::Geometry *> geomlist = sketchgui->getSketchObject()->getCompleteGeometry();
 
-    Base::Vector3d tmpPos(Pos.fX, Pos.fY, 0.f);                 // Current cursor point
-    Base::Vector3d tmpDir(Dir.fX, Dir.fY, 0.f);                 // Direction of line
-    Base::Vector3d tmpStart(Pos.fX-Dir.fX, Pos.fY-Dir.fY, 0.f);  // Start point
+    Base::Vector3d tmpPos(Pos.x, Pos.y, 0.f);                 // Current cursor point
+    Base::Vector3d tmpDir(Dir.x, Dir.y, 0.f);                 // Direction of line
+    Base::Vector3d tmpStart(Pos.x-Dir.x, Pos.y-Dir.y, 0.f);  // Start point
 
     // Iterate through geometry
     int i = 0;
@@ -287,7 +280,7 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
             Base::Vector3d focus1P = center + cf * majdir;
             Base::Vector3d focus2P = center - cf * majdir;
             
-            Base::Vector3d norm = Base::Vector3d(Dir.fY,-Dir.fX).Normalize();
+            Base::Vector3d norm = Base::Vector3d(Dir.y,-Dir.x).Normalize();
             
             double distancetoline = norm*(tmpPos - focus1P); // distance focus1 to line
                         
@@ -342,7 +335,7 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
             Base::Vector3d focus1P = center + cf * majdir;
             Base::Vector3d focus2P = center - cf * majdir;
             
-            Base::Vector3d norm = Base::Vector3d(Dir.fY,-Dir.fX).Normalize();
+            Base::Vector3d norm = Base::Vector3d(Dir.y,-Dir.x).Normalize();
             
             double distancetoline = norm*(tmpPos - focus1P); // distance focus1 to line
                         
@@ -390,15 +383,18 @@ int DrawSketchHandler::seekAutoConstraint(std::vector<AutoConstraint> &suggested
 }
 
 void DrawSketchHandler::createAutoConstraints(const std::vector<AutoConstraint> &autoConstrs,
-                                              int geoId1, Sketcher::PointPos posId1)
+                                              int geoId1, Sketcher::PointPos posId1, bool createowncommand /*= true*/)
 {
     if (!sketchgui->Autoconstraints.getValue())
         return; // If Autoconstraints property is not set quit
 
     if (autoConstrs.size() > 0) {
-        // Open the Command
-        Gui::Command::openCommand("Add auto constraints");
-
+        
+        if(createowncommand) {
+            // Open the Command
+            Gui::Command::openCommand("Add auto constraints");
+        }
+        
         // Iterate through constraints
         std::vector<AutoConstraint>::const_iterator it = autoConstrs.begin();
         for (; it != autoConstrs.end(); ++it) {
@@ -519,7 +515,9 @@ void DrawSketchHandler::createAutoConstraints(const std::vector<AutoConstraint> 
                 break;
             }
 
-            Gui::Command::commitCommand();
+            if(createowncommand) {
+                Gui::Command::commitCommand();
+            }
             //Gui::Command::updateActive(); // There is already an recompute in each command creation, this is redundant.
         }
     }
@@ -581,13 +579,13 @@ void DrawSketchHandler::renderSuggestConstraintsCursor(std::vector<AutoConstrain
     applyCursor(newCursor);
 }
 
-void DrawSketchHandler::setPositionText(const Base::Vector2D &Pos, const SbString &text)
+void DrawSketchHandler::setPositionText(const Base::Vector2d &Pos, const SbString &text)
 {
     sketchgui->setPositionText(Pos, text);
 }
 
 
-void DrawSketchHandler::setPositionText(const Base::Vector2D &Pos)
+void DrawSketchHandler::setPositionText(const Base::Vector2d &Pos)
 {
     sketchgui->setPositionText(Pos);
 }
